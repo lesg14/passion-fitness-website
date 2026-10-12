@@ -67,17 +67,20 @@ class LoginView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
         login(request, user)
+        new_csrf = get_token(request)
         return Response({
             'username': user.get_username(),
             'is_staff': user.is_staff,
             'is_superuser': user.is_superuser,
             'role': 'admin' if user.is_superuser else 'staff',
+            'csrfToken': new_csrf,
         })
 
 
 class SessionView(APIView):
     permission_classes = [AllowAny]
 
+    @method_decorator(ensure_csrf_cookie)
     def get(self, request):
         if not request.user.is_authenticated:
             return Response({'detail': 'Inicia sesión.'}, status=status.HTTP_401_UNAUTHORIZED)
@@ -88,6 +91,7 @@ class SessionView(APIView):
             'is_staff': request.user.is_staff,
             'is_superuser': request.user.is_superuser,
             'role': 'admin' if request.user.is_superuser else 'staff',
+            'csrfToken': get_token(request),
         })
 
 
@@ -120,9 +124,14 @@ class DashboardView(APIView):
 
 
 class PlanSerializer(serializers.ModelSerializer):
+    total_memberships = serializers.SerializerMethodField()
+
     class Meta:
         model = Plan
-        fields = ('id', 'nombre', 'precio_cop', 'duracion_dias', 'activo')
+        fields = ('id', 'nombre', 'precio_cop', 'duracion_dias', 'activo', 'total_memberships')
+
+    def get_total_memberships(self, obj):
+        return obj.memberships.count()
 
 
 class PlanListCreateView(generics.ListCreateAPIView):

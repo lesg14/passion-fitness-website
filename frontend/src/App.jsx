@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import {
   Activity,
   AlertTriangle,
+  ArrowLeft,
   CalendarDays,
   Check,
   ChevronDown,
@@ -64,7 +65,7 @@ function getAvatarTone(estado) {
 }
 
 function LoginScreen({ onLogin, connectionError }) {
-  const [role, setRole] = useState('staff');
+  const [role, setRole] = useState('admin');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -147,12 +148,13 @@ function LoginScreen({ onLogin, connectionError }) {
 
         <form className="login-form" onSubmit={submit}>
           <label>
-            Usuario
+            Usuario o Correo
             <input
               autoComplete="username"
               required
               value={username}
               onChange={(event) => setUsername(event.target.value)}
+              placeholder="passion-fitness o pasion@gmail.com"
             />
           </label>
           <label>
@@ -211,12 +213,19 @@ function MemberDialog({ plans, onClose, onAdd }) {
 
   async function submit(event) {
     event.preventDefault();
+    if (!form.acepta_datos) {
+      setError('Debes autorizar el tratamiento de datos personales del miembro (Ley 1581 de 2012).');
+      return;
+    }
     setBusy(true);
     setError('');
     try {
-      await onAdd({ ...form, plan_id: Number(form.plan_id) });
-    } catch (requestError) {
-      setError(requestError.message);
+      await onAdd({
+        ...form,
+        plan_id: Number(form.plan_id),
+      });
+    } catch (saveError) {
+      setError(saveError.message);
     } finally {
       setBusy(false);
     }
@@ -227,23 +236,25 @@ function MemberDialog({ plans, onClose, onAdd }) {
       <section className="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title">
         <div className="dialog-heading">
           <div>
-            <span className="eyebrow">NUEVA MEMBRESÍA</span>
-            <h2 id="dialog-title">Registrar miembro</h2>
+            <span className="eyebrow">NUEVO REGISTRO</span>
+            <h2 id="dialog-title">Añadir miembro</h2>
           </div>
           <button className="icon-button" type="button" onClick={onClose} aria-label="Cerrar">
             <X size={19} />
           </button>
         </div>
+
         {error && (
           <p className="form-error" role="alert">
             {error}
           </p>
         )}
-        <form onSubmit={submit} className="member-form">
+
+        <form className="member-form" onSubmit={submit}>
           <div className="form-row">
             <label>
               Nombres
-              <input autoFocus required maxLength="100" value={form.nombres} onChange={update('nombres')} />
+              <input required maxLength="100" value={form.nombres} onChange={update('nombres')} />
             </label>
             <label>
               Apellidos
@@ -267,24 +278,21 @@ function MemberDialog({ plans, onClose, onAdd }) {
           </div>
           <div className="form-row">
             <label>
-              Correo electrónico
-              <input type="email" value={form.email} onChange={update('email')} />
-            </label>
-            <label>
               Teléfono
               <input maxLength="20" value={form.telefono} onChange={update('telefono')} />
+            </label>
+            <label>
+              Correo electrónico
+              <input type="email" value={form.email} onChange={update('email')} />
             </label>
           </div>
           <div className="form-row">
             <label>
-              Plan
-              <select required value={form.plan_id} onChange={update('plan_id')}>
-                <option value="" disabled>
-                  Selecciona un plan
-                </option>
+              Plan inicial
+              <select value={form.plan_id} onChange={update('plan_id')} required>
                 {plans.map((plan) => (
                   <option key={plan.id} value={plan.id}>
-                    {plan.nombre} · {formatCurrency(plan.precio_cop)}
+                    {plan.nombre} ({plan.duracion_dias} días) · {formatCurrency(plan.precio_cop)}
                   </option>
                 ))}
               </select>
@@ -429,7 +437,7 @@ function RenewPaymentDialog({ member, plans, onClose, onSuccess }) {
           <label>
             Referencia o comprobante (opcional)
             <input
-              placeholder="Ej: Nequi #12345 o voucher"
+              placeholder="Ej: Nequi M192837 o Banco"
               value={referencia}
               onChange={(event) => setReferencia(event.target.value)}
             />
@@ -439,8 +447,8 @@ function RenewPaymentDialog({ member, plans, onClose, onSuccess }) {
             <button className="button button-quiet" type="button" onClick={onClose}>
               Cancelar
             </button>
-            <button className="button button-primary" type="submit" disabled={busy || !plans.length}>
-              {busy ? 'Registrando…' : 'Confirmar pago y renovar'}
+            <button className="button button-primary" type="submit" disabled={busy}>
+              {busy ? 'Procesando…' : 'Confirmar renovación'}
             </button>
           </div>
         </form>
@@ -460,18 +468,19 @@ function EditMemberDialog({ member, onClose, onSuccess }) {
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const update = (field) => (event) => setForm((curr) => ({ ...curr, [field]: event.target.value }));
+
+  const update = (field) => (event) => setForm((c) => ({ ...c, [field]: event.target.value }));
 
   async function submit(event) {
     event.preventDefault();
     setBusy(true);
     setError('');
     try {
-      await apiRequest(`/members/${member.id}/`, {
+      const updated = await apiRequest(`/members/${member.id}/`, {
         method: 'PATCH',
         body: form,
       });
-      onSuccess(`Datos de ${form.nombres} actualizados.`);
+      onSuccess(`Datos de ${updated.nombre} actualizados con éxito.`);
       onClose();
     } catch (requestError) {
       setError(requestError.message);
@@ -615,92 +624,46 @@ function DeleteMemberConfirmDialog({ member, onClose, onSuccess }) {
   );
 }
 
-function PlansManagementDialog({ onClose, onPlansChanged }) {
-  const [plans, setPlans] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [showNewForm, setShowNewForm] = useState(false);
-  const [editingPlanId, setEditingPlanId] = useState(null);
-  const [newPlan, setNewPlan] = useState({ nombre: '', precio_cop: '', duracion_dias: 30 });
-  const [editPrice, setEditPrice] = useState('');
+function EditPlanDialog({ plan, onClose, onSuccess }) {
+  const [form, setForm] = useState({
+    nombre: plan.nombre,
+    precio_cop: plan.precio_cop,
+    duracion_dias: plan.duracion_dias,
+    activo: plan.activo,
+  });
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
 
-  async function loadAllPlans() {
-    try {
-      const data = await apiRequest('/plans/?all=true');
-      setPlans(data);
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    loadAllPlans();
-  }, []);
-
-  async function handleCreatePlan(event) {
+  async function submit(event) {
     event.preventDefault();
     setBusy(true);
     setError('');
     try {
-      await apiRequest('/plans/', {
-        method: 'POST',
+      const updated = await apiRequest(`/plans/${plan.id}/`, {
+        method: 'PATCH',
         body: {
-          nombre: newPlan.nombre,
-          precio_cop: Number(newPlan.precio_cop),
-          duracion_dias: Number(newPlan.duracion_dias),
-          activo: true,
+          nombre: form.nombre.trim(),
+          precio_cop: Number(form.precio_cop),
+          duracion_dias: Number(form.duracion_dias),
+          activo: Boolean(form.activo),
         },
       });
-      setNewPlan({ nombre: '', precio_cop: '', duracion_dias: 30 });
-      setShowNewForm(false);
-      await loadAllPlans();
-      onPlansChanged();
-    } catch (e) {
-      setError(e.message);
+      onSuccess(`Plan "${updated.nombre}" actualizado con éxito.`);
+      onClose();
+    } catch (err) {
+      setError(err.message);
     } finally {
       setBusy(false);
     }
   }
 
-  async function toggleActive(plan) {
-    setError('');
-    try {
-      await apiRequest(`/plans/${plan.id}/`, {
-        method: 'PATCH',
-        body: { activo: !plan.activo },
-      });
-      await loadAllPlans();
-      onPlansChanged();
-    } catch (e) {
-      setError(e.message);
-    }
-  }
-
-  async function handleSavePrice(planId) {
-    setError('');
-    try {
-      await apiRequest(`/plans/${planId}/`, {
-        method: 'PATCH',
-        body: { precio_cop: Number(editPrice) },
-      });
-      setEditingPlanId(null);
-      await loadAllPlans();
-      onPlansChanged();
-    } catch (e) {
-      setError(e.message);
-    }
-  }
-
   return (
     <div className="dialog-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <section className="dialog plans-dialog" role="dialog" aria-modal="true" aria-labelledby="plans-title">
+      <section className="dialog" role="dialog" aria-modal="true" aria-labelledby="edit-plan-title">
         <div className="dialog-heading">
           <div>
             <span className="eyebrow">MODO ADMINISTRADOR</span>
-            <h2 id="plans-title">Gestión de Planes de Membresía</h2>
+            <h2 id="edit-plan-title">Editar Plan de Membresía</h2>
           </div>
           <button className="icon-button" type="button" onClick={onClose} aria-label="Cerrar">
             <X size={19} />
@@ -713,29 +676,290 @@ function PlansManagementDialog({ onClose, onPlansChanged }) {
           </p>
         )}
 
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <span style={{ fontSize: 11, color: '#667066' }}>Crea, modifica precios o pausa planes de tu gimnasio.</span>
-          <button
-            className="button button-primary"
-            type="button"
-            onClick={() => setShowNewForm(!showNewForm)}
-            style={{ fontSize: 10, minHeight: 30 }}
-          >
-            <Plus size={14} /> {showNewForm ? 'Ocultar formulario' : 'Nuevo Plan'}
+        <form onSubmit={submit} className="member-form">
+          <label>
+            Nombre del plan
+            <input
+              required
+              maxLength="100"
+              value={form.nombre}
+              onChange={(e) => setForm({ ...form, nombre: e.target.value })}
+            />
+          </label>
+          <div className="form-row">
+            <label>
+              Precio (COP)
+              <input
+                type="number"
+                min="1000"
+                step="1000"
+                required
+                value={form.precio_cop}
+                onChange={(e) => setForm({ ...form, precio_cop: e.target.value })}
+              />
+            </label>
+            <label>
+              Duración (días)
+              <input
+                type="number"
+                min="1"
+                required
+                value={form.duracion_dias}
+                onChange={(e) => setForm({ ...form, duracion_dias: e.target.value })}
+              />
+            </label>
+          </div>
+          <label className="consent-field" style={{ marginTop: 4 }}>
+            <input
+              type="checkbox"
+              checked={form.activo}
+              onChange={(e) => setForm({ ...form, activo: e.target.checked })}
+            />
+            <span>Plan activo (disponible para venta y renovación en recepción)</span>
+          </label>
+
+          <div className="dialog-actions">
+            <button className="button button-quiet" type="button" onClick={onClose}>
+              Cancelar
+            </button>
+            <button className="button button-primary" type="submit" disabled={busy}>
+              {busy ? 'Guardando…' : 'Guardar cambios'}
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
+}
+
+function DeletePlanConfirmDialog({ plan, onClose, onSuccess }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  async function confirmDelete() {
+    setBusy(true);
+    setError('');
+    try {
+      const resp = await apiRequest(`/plans/${plan.id}/`, { method: 'DELETE' });
+      const detail = resp?.detail || `Plan "${plan.nombre}" eliminado o inactivado correctamente.`;
+      onSuccess(detail);
+      onClose();
+    } catch (err) {
+      setError(err.message);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="dialog-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <section className="dialog" role="dialog" aria-modal="true" aria-labelledby="delete-plan-title">
+        <div className="dialog-heading">
+          <div>
+            <span className="eyebrow" style={{ color: '#b73824' }}>
+              ELIMINACIÓN DE PLAN
+            </span>
+            <h2 id="delete-plan-title">Eliminar plan</h2>
+          </div>
+          <button className="icon-button" type="button" onClick={onClose} aria-label="Cerrar">
+            <X size={19} />
           </button>
         </div>
 
-        {showNewForm && (
-          <form
-            onSubmit={handleCreatePlan}
-            style={{ background: '#f6f8f5', padding: 12, borderRadius: 6, marginBottom: 14 }}
+        <div className="dialog-info-banner warning" style={{ marginBottom: 18 }}>
+          <AlertTriangle size={20} style={{ flexShrink: 0, marginTop: 2 }} />
+          <div>
+            <strong>¿Confirmas eliminar el plan "{plan.nombre}"?</strong>
+            <span>
+              Si el plan cuenta con membresías históricas asociadas, se pausará e inactivará automáticamente para
+              preservar los reportes contables.
+            </span>
+          </div>
+        </div>
+
+        {error && (
+          <p className="form-error" role="alert">
+            {error}
+          </p>
+        )}
+
+        <div className="dialog-actions">
+          <button className="button button-quiet" type="button" onClick={onClose}>
+            Cancelar
+          </button>
+          <button
+            className="button"
+            style={{ background: '#b73824', color: '#fff' }}
+            type="button"
+            onClick={confirmDelete}
+            disabled={busy}
           >
+            {busy ? 'Eliminando…' : 'Confirmar eliminación'}
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function PlansManagementView({ onBackToDashboard, showToast, onPlanListChanged }) {
+  const [plans, setPlans] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [filterState, setFilterState] = useState('todos');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [newPlan, setNewPlan] = useState({ nombre: '', precio_cop: '', duracion_dias: 30, activo: true });
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState('');
+  const [selectedPlanForEdit, setSelectedPlanForEdit] = useState(null);
+  const [selectedPlanForDelete, setSelectedPlanForDelete] = useState(null);
+
+  async function loadPlans() {
+    try {
+      const data = await apiRequest('/plans/?all=true');
+      setPlans(data);
+      if (onPlanListChanged) onPlanListChanged(data);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadPlans();
+  }, []);
+
+  async function handleCreatePlan(event) {
+    event.preventDefault();
+    setCreating(true);
+    setCreateError('');
+    try {
+      const created = await apiRequest('/plans/', {
+        method: 'POST',
+        body: {
+          nombre: newPlan.nombre.trim(),
+          precio_cop: Number(newPlan.precio_cop),
+          duracion_dias: Number(newPlan.duracion_dias),
+          activo: Boolean(newPlan.activo),
+        },
+      });
+      showToast(`¡Plan "${created.nombre}" creado exitosamente!`);
+      setNewPlan({ nombre: '', precio_cop: '', duracion_dias: 30, activo: true });
+      setShowCreateForm(false);
+      await loadPlans();
+    } catch (err) {
+      setCreateError(err.message);
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function handleToggleActive(plan) {
+    setError('');
+    try {
+      const updated = await apiRequest(`/plans/${plan.id}/`, {
+        method: 'PATCH',
+        body: { activo: !plan.activo },
+      });
+      showToast(`Plan "${plan.nombre}" marcado como ${updated.activo ? 'Activo' : 'Inactivo'}.`);
+      await loadPlans();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  const activePlansCount = useMemo(() => plans.filter((p) => p.activo).length, [plans]);
+  const inactivePlansCount = useMemo(() => plans.filter((p) => !p.activo).length, [plans]);
+  const totalPlansCount = plans.length;
+
+  const filteredPlans = useMemo(() => {
+    const term = searchQuery.toLowerCase().trim();
+    return plans.filter((p) => {
+      if (term && !p.nombre.toLowerCase().includes(term)) return false;
+      if (filterState === 'activos') return p.activo;
+      if (filterState === 'inactivos') return !p.activo;
+      return true;
+    });
+  }, [plans, filterState, searchQuery]);
+
+  return (
+    <div className="page-wrap">
+      <section className="page-heading">
+        <div>
+          <p className="eyebrow">ADMINISTRACIÓN DEL CLUB</p>
+          <h1>
+            Gestión de Planes de Membresía<span>.</span>
+          </h1>
+          <p className="page-subtitle">
+            Crea, actualiza tarifas en COP, modifica vigencias y controla los planes disponibles para venta y recepción.
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="button button-quiet" type="button" onClick={onBackToDashboard}>
+            <ArrowLeft size={16} /> Volver al Resumen
+          </button>
+          <button
+            className="button button-primary"
+            type="button"
+            onClick={() => {
+              setShowCreateForm(!showCreateForm);
+              setCreateError('');
+            }}
+          >
+            <Plus size={16} /> {showCreateForm ? 'Ocultar formulario' : 'Nuevo Plan'}
+          </button>
+        </div>
+      </section>
+
+      {/* 3 Tarjetas informativas en una sola fila horizontal */}
+      <section className="plans-metrics-grid" aria-label="Estadísticas de planes">
+        <Metric
+          icon={SlidersHorizontal}
+          label="Cantidad total de planes"
+          value={totalPlansCount}
+          caption="Planes registrados en el club"
+          tone="blue"
+        />
+        <Metric
+          icon={Check}
+          label="Cantidad de planes activos"
+          value={activePlansCount}
+          caption="Disponibles para venta y renovación"
+          tone="green"
+        />
+        <Metric
+          icon={AlertTriangle}
+          label="Cantidad de planes inactivos"
+          value={inactivePlansCount}
+          caption="Pausados o fuera de oferta"
+          tone="pink"
+        />
+      </section>
+
+      {/* Formulario de creación de plan */}
+      {showCreateForm && (
+        <article className="plan-form-card">
+          <div className="plan-form-header">
+            <h3>Crear nuevo plan de membresía</h3>
+            <button className="icon-button" type="button" onClick={() => setShowCreateForm(false)} aria-label="Cerrar formulario">
+              <X size={16} />
+            </button>
+          </div>
+
+          {createError && (
+            <p className="form-error" role="alert" style={{ marginBottom: 14 }}>
+              {createError}
+            </p>
+          )}
+
+          <form onSubmit={handleCreatePlan} className="member-form">
             <div className="form-row">
               <label>
                 Nombre del plan
                 <input
                   required
-                  placeholder="Ej: Trimestral"
+                  placeholder="Ej: Trimestral, Semestral, Tiquetera..."
                   value={newPlan.nombre}
                   onChange={(e) => setNewPlan({ ...newPlan, nombre: e.target.value })}
                 />
@@ -747,105 +971,250 @@ function PlansManagementDialog({ onClose, onPlansChanged }) {
                   min="1000"
                   step="1000"
                   required
-                  placeholder="220000"
+                  placeholder="Ej: 220000"
                   value={newPlan.precio_cop}
                   onChange={(e) => setNewPlan({ ...newPlan, precio_cop: e.target.value })}
                 />
               </label>
             </div>
-            <div className="form-row" style={{ marginTop: 8 }}>
+            <div className="form-row">
               <label>
                 Duración (días)
                 <input
                   type="number"
                   min="1"
                   required
+                  placeholder="Ej: 90"
                   value={newPlan.duracion_dias}
                   onChange={(e) => setNewPlan({ ...newPlan, duracion_dias: e.target.value })}
                 />
               </label>
-              <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-                <button className="button button-primary" type="submit" disabled={busy} style={{ width: '100%' }}>
-                  {busy ? 'Creando…' : 'Guardar Plan'}
-                </button>
+              <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                <label className="consent-field" style={{ marginTop: 18 }}>
+                  <input
+                    type="checkbox"
+                    checked={newPlan.activo}
+                    onChange={(e) => setNewPlan({ ...newPlan, activo: e.target.checked })}
+                  />
+                  <span>Activo de inmediato para venta y recepción</span>
+                </label>
               </div>
             </div>
+
+            <div className="dialog-actions" style={{ marginTop: 6 }}>
+              <button className="button button-quiet" type="button" onClick={() => setShowCreateForm(false)}>
+                Cancelar
+              </button>
+              <button className="button button-primary" type="submit" disabled={creating}>
+                {creating ? 'Guardando…' : 'Guardar Plan'}
+              </button>
+            </div>
           </form>
-        )}
+        </article>
+      )}
 
-        {loading ? (
-          <p style={{ textAlign: 'center', padding: 20, color: '#778077', fontSize: 12 }}>Cargando planes…</p>
-        ) : (
-          <div className="plans-grid">
-            {plans.map((plan) => (
-              <div key={plan.id} className={`plan-manage-card ${!plan.activo ? 'inactive' : ''}`}>
-                <div className="plan-manage-info">
-                  <strong>
-                    {plan.nombre} {!plan.activo && <small style={{ color: '#b73824' }}>(Pausado)</small>}
-                  </strong>
-                  {editingPlanId === plan.id ? (
-                    <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 4 }}>
-                      <input
-                        type="number"
-                        style={{ width: 110, height: 26, fontSize: 11, padding: '0 6px' }}
-                        value={editPrice}
-                        onChange={(e) => setEditPrice(e.target.value)}
-                      />
-                      <button
-                        className="button button-primary"
-                        type="button"
-                        style={{ minHeight: 26, padding: '0 8px' }}
-                        onClick={() => handleSavePrice(plan.id)}
-                      >
-                        OK
-                      </button>
-                      <button
-                        className="button button-quiet"
-                        type="button"
-                        style={{ minHeight: 26, padding: '0 6px' }}
-                        onClick={() => setEditingPlanId(null)}
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  ) : (
-                    <span>
-                      {formatCurrency(plan.precio_cop)} · {plan.duracion_dias} días
-                    </span>
-                  )}
-                </div>
-                <div className="plan-manage-actions">
-                  <button
-                    className="action-btn"
-                    type="button"
-                    onClick={() => {
-                      setEditingPlanId(plan.id);
-                      setEditPrice(plan.precio_cop);
-                    }}
-                    title="Editar precio"
-                  >
-                    <Edit2 size={12} /> Precio
-                  </button>
-                  <button
-                    className="action-btn"
-                    type="button"
-                    onClick={() => toggleActive(plan)}
-                    style={{ color: plan.activo ? '#b73824' : '#367559' }}
-                  >
-                    {plan.activo ? 'Pausar' : 'Activar'}
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <div className="dialog-actions" style={{ marginTop: 15 }}>
-          <button className="button button-quiet" type="button" onClick={onClose}>
-            Cerrar
+      {error && (
+        <div className="api-notice" role="alert" style={{ marginBottom: 18 }}>
+          {error}
+          <button type="button" onClick={loadPlans}>
+            Reintentar
           </button>
         </div>
+      )}
+
+      {/* Tabla CRUD de Planes */}
+      <section className="panel plans-crud-panel">
+        <div className="panel-heading" style={{ marginBottom: 14 }}>
+          <div>
+            <p className="eyebrow">CATÁLOGO</p>
+            <h2>Listado y edición de planes</h2>
+          </div>
+          <div className="member-tools">
+            <label className="search-field">
+              <Search size={16} />
+              <input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Buscar plan..."
+                aria-label="Buscar plan"
+              />
+            </label>
+            {searchQuery && (
+              <button className="button button-quiet" type="button" onClick={() => setSearchQuery('')}>
+                Limpiar
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Barra de filtros de estado */}
+        <div className="filter-toolbar" style={{ marginBottom: 14 }}>
+          <div className="filter-tabs" role="tablist" aria-label="Filtro de planes">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={filterState === 'todos'}
+              className={`filter-tab ${filterState === 'todos' ? 'active' : ''}`}
+              onClick={() => setFilterState('todos')}
+            >
+              Todos <span className="filter-count">{totalPlansCount}</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={filterState === 'activos'}
+              className={`filter-tab ${filterState === 'activos' ? 'active' : ''}`}
+              onClick={() => setFilterState('activos')}
+            >
+              Activos <span className="filter-count">{activePlansCount}</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={filterState === 'inactivos'}
+              className={`filter-tab ${filterState === 'inactivos' ? 'active' : ''}`}
+              onClick={() => setFilterState('inactivos')}
+            >
+              Inactivos <span className="filter-count">{inactivePlansCount}</span>
+            </button>
+          </div>
+        </div>
+
+        {loading ? (
+          <p style={{ textAlign: 'center', padding: '30px 0', color: '#778077', fontSize: 12 }}>
+            Cargando planes de membresía…
+          </p>
+        ) : (
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>PLAN</th>
+                  <th>DURACIÓN</th>
+                  <th>PRECIO (COP)</th>
+                  <th>MEMBRESÍAS VENDIDAS</th>
+                  <th>ESTADO</th>
+                  <th style={{ textAlign: 'right', paddingRight: 14 }}>ACCIONES</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredPlans.length ? (
+                  filteredPlans.map((plan) => (
+                    <tr key={plan.id}>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <span
+                            style={{
+                              width: 32,
+                              height: 32,
+                              borderRadius: 6,
+                              background: plan.activo ? '#e8f3ea' : '#f0f2ef',
+                              color: plan.activo ? '#367559' : '#889186',
+                              display: 'grid',
+                              placeItems: 'center',
+                              fontWeight: 700,
+                              fontSize: 11,
+                            }}
+                          >
+                            <SlidersHorizontal size={15} />
+                          </span>
+                          <div>
+                            <strong style={{ color: '#27342a', fontSize: 12 }}>{plan.nombre}</strong>
+                            {!plan.activo && (
+                              <span style={{ display: 'block', fontSize: 10, color: '#aa744b' }}>
+                                Fuera de oferta en recepción
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="date-cell">
+                        <strong>{plan.duracion_dias} días</strong>
+                        {plan.duracion_dias === 30 && <small style={{ color: '#889186' }}> (1 mes)</small>}
+                        {plan.duracion_dias === 90 && <small style={{ color: '#889186' }}> (3 meses)</small>}
+                        {plan.duracion_dias === 180 && <small style={{ color: '#889186' }}> (6 meses)</small>}
+                        {plan.duracion_dias === 365 && <small style={{ color: '#889186' }}> (1 año)</small>}
+                      </td>
+                      <td className="plan-cell">
+                        <strong style={{ color: '#29372d', fontSize: 12 }}>{formatCurrency(plan.precio_cop)}</strong>
+                      </td>
+                      <td>
+                        <span style={{ fontSize: 11, color: '#556054', fontWeight: 600 }}>
+                          {plan.total_memberships ?? 0} registradas
+                        </span>
+                      </td>
+                      <td>
+                        <span className={`status-badge ${plan.activo ? 'active' : 'inactive'}`}>
+                          <i />
+                          {plan.activo ? 'Activo' : 'Inactivo'}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="member-actions">
+                          <button
+                            className="action-btn"
+                            type="button"
+                            onClick={() => setSelectedPlanForEdit(plan)}
+                            title="Editar plan completo"
+                          >
+                            <Edit2 size={12} /> Editar
+                          </button>
+                          <button
+                            className="action-btn"
+                            type="button"
+                            onClick={() => handleToggleActive(plan)}
+                            style={{ color: plan.activo ? '#aa744b' : '#367559' }}
+                            title={plan.activo ? 'Pausar plan' : 'Activar plan'}
+                          >
+                            {plan.activo ? 'Pausar' : 'Activar'}
+                          </button>
+                          <button
+                            className="action-btn action-delete"
+                            type="button"
+                            onClick={() => setSelectedPlanForDelete(plan)}
+                            title="Eliminar plan"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="6" className="empty-state">
+                      No se encontraron planes con los filtros aplicados.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
+
+      {/* Diálogos modales para edición y eliminación de planes */}
+      {selectedPlanForEdit && (
+        <EditPlanDialog
+          plan={selectedPlanForEdit}
+          onClose={() => setSelectedPlanForEdit(null)}
+          onSuccess={(msg) => {
+            showToast(msg);
+            loadPlans();
+          }}
+        />
+      )}
+
+      {selectedPlanForDelete && (
+        <DeletePlanConfirmDialog
+          plan={selectedPlanForDelete}
+          onClose={() => setSelectedPlanForDelete(null)}
+          onSuccess={(msg) => {
+            showToast(msg);
+            loadPlans();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -854,6 +1223,7 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [connectionError, setConnectionError] = useState('');
+  const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard' | 'plans'
   const [period, setPeriod] = useState(6);
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('todos');
@@ -862,7 +1232,6 @@ export default function App() {
   const [plans, setPlans] = useState([]);
   const [dataError, setDataError] = useState('');
   const [showAddMemberDialog, setShowAddMemberDialog] = useState(false);
-  const [showPlansDialog, setShowPlansDialog] = useState(false);
   const [selectedMemberForRenewal, setSelectedMemberForRenewal] = useState(null);
   const [selectedMemberForEdit, setSelectedMemberForEdit] = useState(null);
   const [selectedMemberForDelete, setSelectedMemberForDelete] = useState(null);
@@ -871,7 +1240,7 @@ export default function App() {
 
   const showToast = (message) => {
     setToastMessage(message);
-    setTimeout(() => setToastMessage(''), 4000);
+    setTimeout(() => setToastMessage(''), 4500);
   };
 
   useEffect(() => {
@@ -932,6 +1301,7 @@ export default function App() {
     setUser(null);
     setDashboard(null);
     setMembers([]);
+    setActiveTab('dashboard');
   }
 
   async function createMember(data) {
@@ -998,8 +1368,17 @@ export default function App() {
 
   return (
     <div className="app-shell">
+      {/* Barra lateral permanente (sin perder el menú lateral) */}
       <aside className="sidebar">
-        <a className="brand" href="#resumen" aria-label="Passion Fitness, inicio">
+        <a
+          className="brand"
+          href="#resumen"
+          onClick={(e) => {
+            e.preventDefault();
+            setActiveTab('dashboard');
+          }}
+          aria-label="Passion Fitness, inicio"
+        >
           <span className="brand-mark">
             <Dumbbell size={19} />
           </span>
@@ -1008,37 +1387,74 @@ export default function App() {
             <small>FITNESS CLUB</small>
           </span>
         </a>
+
         <div className="sidebar-label">GESTIÓN</div>
         <nav className="primary-nav" aria-label="Navegación principal">
-          <a className="nav-link selected" href="#resumen">
+          <button
+            type="button"
+            className={`nav-link ${activeTab === 'dashboard' ? 'selected' : ''}`}
+            onClick={() => setActiveTab('dashboard')}
+            style={{ width: '100%', background: activeTab === 'dashboard' ? '#ffffff16' : 'transparent', border: 0, cursor: 'pointer', textAlign: 'left' }}
+          >
             <LayoutDashboard size={18} />
             <span>Resumen</span>
-            <i className="nav-indicator" />
-          </a>
-          <a className="nav-link" href="#miembros">
+            {activeTab === 'dashboard' && <i className="nav-indicator" />}
+          </button>
+
+          <button
+            type="button"
+            className="nav-link"
+            onClick={() => {
+              setActiveTab('dashboard');
+              setTimeout(() => {
+                document.getElementById('miembros')?.scrollIntoView({ behavior: 'smooth' });
+              }, 50);
+            }}
+            style={{ width: '100%', background: 'transparent', border: 0, cursor: 'pointer', textAlign: 'left' }}
+          >
             <Users size={18} />
             <span>Miembros</span>
             <small className="nav-count">{metrics?.miembros ?? '—'}</small>
-          </a>
-          <a className="nav-link" href="#ingresos">
+          </button>
+
+          <button
+            type="button"
+            className="nav-link"
+            onClick={() => {
+              setActiveTab('dashboard');
+              setTimeout(() => {
+                document.getElementById('ingresos')?.scrollIntoView({ behavior: 'smooth' });
+              }, 50);
+            }}
+            style={{ width: '100%', background: 'transparent', border: 0, cursor: 'pointer', textAlign: 'left' }}
+          >
             <CreditCard size={18} />
             <span>Ingresos</span>
-          </a>
+          </button>
+
           {isAdmin && (
             <button
-              className="nav-link"
               type="button"
-              style={{ width: '100%', background: 'transparent', border: 0, cursor: 'pointer', textAlign: 'left' }}
-              onClick={() => setShowPlansDialog(true)}
+              className={`nav-link ${activeTab === 'plans' ? 'selected' : ''}`}
+              onClick={() => setActiveTab('plans')}
+              style={{
+                width: '100%',
+                background: activeTab === 'plans' ? '#ffffff16' : 'transparent',
+                border: 0,
+                cursor: 'pointer',
+                textAlign: 'left',
+              }}
             >
               <SlidersHorizontal size={18} />
               <span>Gestionar Planes</span>
+              {activeTab === 'plans' && <i className="nav-indicator" />}
             </button>
           )}
         </nav>
+
         <div className="sidebar-bottom">
           <div className="sidebar-label">CLUB</div>
-          <a className="nav-link" href="/admin/">
+          <a className="nav-link" href="/admin/" target="_blank" rel="noreferrer">
             <Settings2 size={18} />
             <span>Django Admin</span>
           </a>
@@ -1059,12 +1475,13 @@ export default function App() {
         </div>
       </aside>
 
-      <main className="main-content" id="resumen">
+      {/* Área principal de contenido */}
+      <main className="main-content">
         <header className="topbar">
           <div className="breadcrumb">
             <span>Passion Fitness</span>
             <i>/</i>
-            <strong>Resumen</strong>
+            <strong>{activeTab === 'plans' ? 'Planes de Membresía' : 'Resumen'}</strong>
           </div>
           <div className="topbar-actions">
             <span className={`role-pill ${isAdmin ? 'admin' : 'staff'}`}>
@@ -1079,282 +1496,292 @@ export default function App() {
           </div>
         </header>
 
-        <div className="page-wrap">
-          <section className="page-heading">
-            <div>
-              <p className="eyebrow">PANEL DEL CLUB · {isAdmin ? 'MODO TOTAL' : 'MODO OPERATIVO'}</p>
-              <h1>
-                Tu club, en movimiento<span>.</span>
-              </h1>
-              <p className="page-subtitle">
-                {isAdmin
-                  ? 'Tienes permisos para modificar planes, miembros, pagos y auditoría.'
-                  : 'Control operativo de miembros y cobro de planes.'}
-              </p>
-            </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              {isAdmin && (
-                <button className="button button-quiet" type="button" onClick={() => setShowPlansDialog(true)}>
-                  <SlidersHorizontal size={16} /> Planes
-                </button>
-              )}
-              <button className="button button-primary" type="button" onClick={() => setShowAddMemberDialog(true)}>
-                <Plus size={17} /> Añadir miembro
-              </button>
-            </div>
-          </section>
-
-          {dataError && (
-            <div className="api-notice" role="alert">
-              {dataError}
-              <button type="button" onClick={() => setRefreshKey((current) => current + 1)}>
-                Reintentar
-              </button>
-            </div>
-          )}
-
-          <section className="metrics-grid" aria-label="Indicadores del club">
-            <Metric
-              icon={Users}
-              label="Miembros registrados"
-              value={metrics?.miembros ?? '—'}
-              caption="Total en el sistema"
-              tone="green"
-            />
-            <Metric
-              icon={CalendarDays}
-              label="Por vencer (≤3 días)"
-              value={metrics?.por_vencer ?? '—'}
-              caption="Vence hoy, mañana o en ≤3d"
-              tone="orange"
-            />
-            <Metric
-              icon={CreditCard}
-              label="Ingresos del mes"
-              value={metrics ? formatCompactCurrency(metrics.ingresos_mes) : '—'}
-              caption="Pagos no anulados · COP"
-              tone="blue"
-            />
-            <Metric
-              icon={Activity}
-              label="Miembros activos"
-              value={metrics?.activos ?? '—'}
-              caption={`${metrics?.vencidos ?? '—'} sin membresía vigente`}
-              tone="pink"
-            />
-          </section>
-
-          <section className="overview-grid" id="ingresos">
-            <article className="panel revenue-panel">
-              <div className="panel-heading">
-                <div>
-                  <p className="eyebrow">RENDIMIENTO</p>
-                  <h2>Ingresos del club</h2>
-                </div>
-                <label className="select-wrap">
-                  <span className="sr-only">Periodo del gráfico</span>
-                  <select value={period} onChange={(event) => setPeriod(Number(event.target.value))}>
-                    <option value={3}>Últimos 3 meses</option>
-                    <option value={6}>Últimos 6 meses</option>
-                  </select>
-                  <ChevronDown size={14} />
-                </label>
-              </div>
-              <div className="chart-summary">
-                <strong>{formatCurrency(metrics?.ingresos_mes)}</strong>
-                <span className="chart-summary-caption">este mes</span>
-              </div>
-              <div className="chart-wrap">
-                <Suspense fallback={null}>
-                  <RevenueChart data={dashboard?.revenue || []} />
-                </Suspense>
-              </div>
-            </article>
-
-            <article className="panel pulse-panel" id="planes">
-              <div className="panel-heading">
-                <div>
-                  <p className="eyebrow">MEMBRESÍAS REGISTRADAS</p>
-                  <h2>Planes populares</h2>
-                </div>
-              </div>
-              {dashboard?.plans?.length ? (
-                <div className="plan-list">
-                  {dashboard.plans.map((plan) => {
-                    const max = Math.max(...dashboard.plans.map((item) => item.memberships), 1);
-                    return (
-                      <div className="plan-item" key={plan.name}>
-                        <div className="plan-item-heading">
-                          <span>{plan.name}</span>
-                          <strong>{plan.memberships}</strong>
-                        </div>
-                        <div className="plan-track">
-                          <i style={{ width: `${Math.max((plan.memberships / max) * 100, 3)}%` }} />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p className="empty-plans">Todavía no hay membresías registradas.</p>
-              )}
-            </article>
-          </section>
-
-          <section className="panel members-panel" id="miembros">
-            <div className="panel-heading members-heading">
+        {activeTab === 'plans' ? (
+          <PlansManagementView
+            onBackToDashboard={() => setActiveTab('dashboard')}
+            showToast={showToast}
+            onPlanListChanged={(updatedPlans) => setPlans(updatedPlans.filter((p) => p.activo))}
+          />
+        ) : (
+          <div className="page-wrap">
+            <section className="page-heading">
               <div>
-                <p className="eyebrow">SEGUIMIENTO</p>
-                <h2>Miembros</h2>
+                <p className="eyebrow">PANEL DEL CLUB · {isAdmin ? 'MODO TOTAL' : 'MODO OPERATIVO'}</p>
+                <h1>
+                  Tu club, en movimiento<span>.</span>
+                </h1>
+                <p className="page-subtitle">
+                  {isAdmin
+                    ? 'Tienes permisos para modificar planes, miembros, pagos y auditoría.'
+                    : 'Control operativo de miembros y cobro de planes.'}
+                </p>
               </div>
-              <div className="member-tools">
-                <label className="search-field">
-                  <Search size={16} />
-                  <input
-                    value={query}
-                    onChange={(event) => setQuery(event.target.value)}
-                    placeholder="Buscar por nombre, documento..."
-                    aria-label="Buscar miembro"
-                  />
-                </label>
-                {query && (
-                  <button className="button button-quiet" type="button" onClick={() => setQuery('')}>
-                    Limpiar
+              <div style={{ display: 'flex', gap: 8 }}>
+                {isAdmin && (
+                  <button className="button button-quiet" type="button" onClick={() => setActiveTab('plans')}>
+                    <SlidersHorizontal size={16} /> Gestionar Planes
                   </button>
                 )}
-              </div>
-            </div>
-
-            {/* Filtros rápidos por estado */}
-            <div className="filter-toolbar">
-              <div className="filter-tabs" role="tablist" aria-label="Filtro de estado de membresía">
-                <button
-                  type="button"
-                  className={`filter-tab ${statusFilter === 'todos' ? 'active' : ''}`}
-                  onClick={() => setStatusFilter('todos')}
-                >
-                  Todos <span className="filter-count">{counts.todos}</span>
-                </button>
-                <button
-                  type="button"
-                  className={`filter-tab ${statusFilter === 'activos' ? 'active' : ''}`}
-                  onClick={() => setStatusFilter('activos')}
-                >
-                  Activos <span className="filter-count">{counts.activos}</span>
-                </button>
-                <button
-                  type="button"
-                  className={`filter-tab ${statusFilter === 'por_vencer' ? 'active' : ''}`}
-                  onClick={() => setStatusFilter('por_vencer')}
-                >
-                  Por vencer (≤3d) <span className="filter-count">{counts.por_vencer}</span>
-                </button>
-                <button
-                  type="button"
-                  className={`filter-tab ${statusFilter === 'vencidos' ? 'active' : ''}`}
-                  onClick={() => setStatusFilter('vencidos')}
-                >
-                  Vencidos <span className="filter-count">{counts.vencidos}</span>
+                <button className="button button-primary" type="button" onClick={() => setShowAddMemberDialog(true)}>
+                  <Plus size={17} /> Añadir miembro
                 </button>
               </div>
-            </div>
+            </section>
 
-            <div className="table-scroll">
-              <table>
-                <thead>
-                  <tr>
-                    <th>MIEMBRO</th>
-                    <th>PLAN</th>
-                    <th>VENCIMIENTO</th>
-                    <th>ESTADO</th>
-                    <th style={{ textAlign: 'right', paddingRight: 15 }}>ACCIONES</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {visibleMembers.map((member) => (
-                    <tr key={member.id}>
-                      <td>
-                        <div className="member-cell">
-                          <span className={`member-avatar ${getAvatarTone(member.estado)}`}>
-                            {member.iniciales}
-                          </span>
-                          <span>
-                            <strong>{member.nombre}</strong>
-                            <small>
-                              {member.tipo_documento} {member.numero_documento} {member.telefono ? `· ${member.telefono}` : ''}
-                            </small>
-                          </span>
+            {dataError && (
+              <div className="api-notice" role="alert">
+                {dataError}
+                <button type="button" onClick={() => setRefreshKey((current) => current + 1)}>
+                  Reintentar
+                </button>
+              </div>
+            )}
+
+            <section className="metrics-grid" aria-label="Indicadores del club">
+              <Metric
+                icon={Users}
+                label="Miembros registrados"
+                value={metrics?.miembros ?? '—'}
+                caption="Total en el sistema"
+                tone="green"
+              />
+              <Metric
+                icon={CalendarDays}
+                label="Por vencer (≤3 días)"
+                value={metrics?.por_vencer ?? '—'}
+                caption="Vence hoy, mañana o en ≤3d"
+                tone="orange"
+              />
+              <Metric
+                icon={CreditCard}
+                label="Ingresos del mes"
+                value={metrics ? formatCompactCurrency(metrics.ingresos_mes) : '—'}
+                caption="Pagos no anulados · COP"
+                tone="blue"
+              />
+              <Metric
+                icon={Activity}
+                label="Miembros activos"
+                value={metrics?.activos ?? '—'}
+                caption={`${metrics?.vencidos ?? '—'} sin membresía vigente`}
+                tone="pink"
+              />
+            </section>
+
+            <section className="overview-grid" id="ingresos">
+              <article className="panel revenue-panel">
+                <div className="panel-heading">
+                  <div>
+                    <p className="eyebrow">RENDIMIENTO</p>
+                    <h2>Ingresos del club</h2>
+                  </div>
+                  <label className="select-wrap">
+                    <span className="sr-only">Periodo del gráfico</span>
+                    <select value={period} onChange={(event) => setPeriod(Number(event.target.value))}>
+                      <option value={3}>Últimos 3 meses</option>
+                      <option value={6}>Últimos 6 meses</option>
+                    </select>
+                    <ChevronDown size={14} />
+                  </label>
+                </div>
+                <div className="chart-summary">
+                  <strong>{formatCurrency(metrics?.ingresos_mes)}</strong>
+                  <span className="chart-summary-caption">este mes</span>
+                </div>
+                <div className="chart-wrap">
+                  <Suspense fallback={null}>
+                    <RevenueChart data={dashboard?.revenue || []} />
+                  </Suspense>
+                </div>
+              </article>
+
+              <article className="panel pulse-panel" id="planes">
+                <div className="panel-heading">
+                  <div>
+                    <p className="eyebrow">MEMBRESÍAS REGISTRADAS</p>
+                    <h2>Planes populares</h2>
+                  </div>
+                </div>
+                {dashboard?.plans?.length ? (
+                  <div className="plan-list">
+                    {dashboard.plans.map((plan) => {
+                      const max = Math.max(...dashboard.plans.map((item) => item.memberships), 1);
+                      return (
+                        <div className="plan-item" key={plan.name}>
+                          <div className="plan-item-heading">
+                            <span>{plan.name}</span>
+                            <strong>{plan.memberships}</strong>
+                          </div>
+                          <div className="plan-track">
+                            <i style={{ width: `${Math.max((plan.memberships / max) * 100, 3)}%` }} />
+                          </div>
                         </div>
-                      </td>
-                      <td className="plan-cell">{member.plan || '—'}</td>
-                      <td className="date-cell">{formatDate(member.fecha_fin)}</td>
-                      <td>{renderStatusPill(member.estado)}</td>
-                      <td style={{ textAlign: 'right' }}>
-                        <div className="member-actions">
-                          <button
-                            className="action-btn action-renew"
-                            type="button"
-                            onClick={() => setSelectedMemberForRenewal(member)}
-                            title="Registrar pago o renovar membresía"
-                          >
-                            <CreditCard size={13} /> Renovar
-                          </button>
-                          {isAdmin && (
-                            <>
-                              <button
-                                className="action-btn"
-                                type="button"
-                                onClick={() => setSelectedMemberForEdit(member)}
-                                title="Editar datos del miembro"
-                              >
-                                <Edit2 size={12} />
-                              </button>
-                              <button
-                                className="action-btn action-delete"
-                                type="button"
-                                onClick={() => setSelectedMemberForDelete(member)}
-                                title="Eliminar miembro"
-                              >
-                                <Trash2 size={12} />
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                  {visibleMembers.length === 0 && (
-                    <tr>
-                      <td className="empty-state" colSpan="5">
-                        {query
-                          ? `No encontramos miembros con “${query}”.`
-                          : `No hay miembros en la categoría seleccionada.`}
-                      </td>
-                    </tr>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="empty-plans">Todavía no hay membresías registradas.</p>
+                )}
+              </article>
+            </section>
+
+            <section className="panel members-panel" id="miembros">
+              <div className="panel-heading members-heading">
+                <div>
+                  <p className="eyebrow">SEGUIMIENTO</p>
+                  <h2>Miembros</h2>
+                </div>
+                <div className="member-tools">
+                  <label className="search-field">
+                    <Search size={16} />
+                    <input
+                      value={query}
+                      onChange={(event) => setQuery(event.target.value)}
+                      placeholder="Buscar por nombre, documento..."
+                      aria-label="Buscar miembro"
+                    />
+                  </label>
+                  {query && (
+                    <button className="button button-quiet" type="button" onClick={() => setQuery('')}>
+                      Limpiar
+                    </button>
                   )}
-                </tbody>
-              </table>
-            </div>
-            <div className="table-footer">
-              <span>
-                Mostrando {visibleMembers.length} de {members.length} miembros
-              </span>
-              <span>Datos sincronizados con Django</span>
-            </div>
-          </section>
+                </div>
+              </div>
 
-          <footer className="page-footer">
-            <span>
-              PASSION FITNESS <i /> PANEL DE CONTROL
-            </span>
-            <span>Hecho para moverse.</span>
-          </footer>
-        </div>
+              {/* Filtros rápidos por estado */}
+              <div className="filter-toolbar">
+                <div className="filter-tabs" role="tablist" aria-label="Filtro de estado de membresía">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={statusFilter === 'todos'}
+                    className={`filter-tab ${statusFilter === 'todos' ? 'active' : ''}`}
+                    onClick={() => setStatusFilter('todos')}
+                  >
+                    Todos <span className="filter-count">{counts.todos}</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={statusFilter === 'activos'}
+                    className={`filter-tab ${statusFilter === 'activos' ? 'active' : ''}`}
+                    onClick={() => setStatusFilter('activos')}
+                  >
+                    Activos <span className="filter-count">{counts.activos}</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={statusFilter === 'por_vencer'}
+                    className={`filter-tab ${statusFilter === 'por_vencer' ? 'active' : ''}`}
+                    onClick={() => setStatusFilter('por_vencer')}
+                  >
+                    Por vencer (≤3d) <span className="filter-count">{counts.por_vencer}</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={statusFilter === 'vencidos'}
+                    className={`filter-tab ${statusFilter === 'vencidos' ? 'active' : ''}`}
+                    onClick={() => setStatusFilter('vencidos')}
+                  >
+                    Vencidos <span className="filter-count">{counts.vencidos}</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>MIEMBRO</th>
+                      <th>PLAN</th>
+                      <th>VENCIMIENTO</th>
+                      <th>ESTADO</th>
+                      <th style={{ textAlign: 'right', paddingRight: 14 }}>ACCIONES</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibleMembers.length ? (
+                      visibleMembers.map((member) => (
+                        <tr key={member.id}>
+                          <td>
+                            <div className="member-cell">
+                              <span className={`member-avatar ${getAvatarTone(member.estado)}`}>
+                                {member.iniciales}
+                              </span>
+                              <span>
+                                <strong>{member.nombre}</strong>
+                                <small>
+                                  {member.numero_documento}
+                                  {member.telefono ? ` · ${member.telefono}` : ''}
+                                  {member.email ? ` · ${member.email}` : ''}
+                                </small>
+                              </span>
+                            </div>
+                          </td>
+                          <td className="plan-cell">{member.plan}</td>
+                          <td className="date-cell">{formatDate(member.fecha_fin)}</td>
+                          <td>{renderStatusPill(member.estado)}</td>
+                          <td>
+                            <div className="member-actions">
+                              <button
+                                className="action-btn action-renew"
+                                type="button"
+                                onClick={() => setSelectedMemberForRenewal(member)}
+                                title="Renovar membresía o cobrar"
+                              >
+                                <CreditCard size={12} /> Renovar / Cobrar
+                              </button>
+                              {isAdmin && (
+                                <>
+                                  <button
+                                    className="action-btn"
+                                    type="button"
+                                    onClick={() => setSelectedMemberForEdit(member)}
+                                    title="Editar datos del miembro"
+                                  >
+                                    <Edit2 size={12} />
+                                  </button>
+                                  <button
+                                    className="action-btn action-delete"
+                                    type="button"
+                                    onClick={() => setSelectedMemberForDelete(member)}
+                                    title="Eliminar miembro"
+                                  >
+                                    <Trash2 size={12} />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan="5" className="empty-state">
+                          {query || statusFilter !== 'todos'
+                            ? 'No hay miembros que coincidan con los filtros aplicados.'
+                            : 'Todavía no hay miembros registrados.'}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        )}
       </main>
 
-      {/* Modales */}
+      {/* Diálogos modales globales */}
       {showAddMemberDialog && (
-        <MemberDialog plans={plans} onClose={() => setShowAddMemberDialog(false)} onAdd={createMember} />
+        <MemberDialog
+          plans={plans}
+          onClose={() => setShowAddMemberDialog(false)}
+          onAdd={createMember}
+        />
       )}
 
       {selectedMemberForRenewal && (
@@ -1364,7 +1791,7 @@ export default function App() {
           onClose={() => setSelectedMemberForRenewal(null)}
           onSuccess={(msg) => {
             showToast(msg);
-            setRefreshKey((k) => k + 1);
+            setRefreshKey((c) => c + 1);
           }}
         />
       )}
@@ -1375,7 +1802,7 @@ export default function App() {
           onClose={() => setSelectedMemberForEdit(null)}
           onSuccess={(msg) => {
             showToast(msg);
-            setRefreshKey((k) => k + 1);
+            setRefreshKey((c) => c + 1);
           }}
         />
       )}
@@ -1386,22 +1813,12 @@ export default function App() {
           onClose={() => setSelectedMemberForDelete(null)}
           onSuccess={(msg) => {
             showToast(msg);
-            setRefreshKey((k) => k + 1);
+            setRefreshKey((c) => c + 1);
           }}
         />
       )}
 
-      {showPlansDialog && (
-        <PlansManagementDialog
-          onClose={() => setShowPlansDialog(false)}
-          onPlansChanged={() => {
-            showToast('Planes actualizados.');
-            setRefreshKey((k) => k + 1);
-          }}
-        />
-      )}
-
-      {/* Toast de notificación de éxito */}
+      {/* Toast flotante */}
       {toastMessage && (
         <div className="toast-success" role="status">
           <Check size={16} />
