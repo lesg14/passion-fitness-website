@@ -132,6 +132,17 @@ class DashboardApiTests(TestCase):
         session_info = client.get('/api/auth/session/').json()
         self.assertEqual(session_info['role'], 'staff')
 
+        # Permite iniciar sesión con correo electrónico
+        self.staff.email = 'staff@passionfitness.com'
+        self.staff.save()
+        response_email = client.post(
+            '/api/auth/login/',
+            data=json.dumps({'username': 'staff@passionfitness.com', 'password': 'test-password'}),
+            content_type='application/json',
+            HTTP_X_CSRFTOKEN=self.csrf_token(client),
+        )
+        self.assertEqual(response_email.status_code, 200)
+
         get_user_model().objects.create_user(username='member-user', password='test-password')
         response = client.post(
             '/api/auth/login/',

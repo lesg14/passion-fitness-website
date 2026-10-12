@@ -1,6 +1,6 @@
 ﻿from datetime import timedelta
 
-from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth import authenticate, get_user_model, login, logout
 from django.db import transaction
 from django.db.models import Prefetch, Q
 from django.middleware.csrf import get_token
@@ -40,10 +40,22 @@ class LoginView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        username = request.data.get('username', '')
+        username = request.data.get('username', '').strip()
         password = request.data.get('password', '')
         requested_role = request.data.get('role')
-        user = authenticate(request, username=username, password=password)
+
+        User = get_user_model()
+        auth_username = username
+        if '@' in username:
+            user_match = User.objects.filter(email__iexact=username).first()
+            if user_match:
+                auth_username = user_match.get_username()
+        else:
+            user_match = User.objects.filter(username__iexact=username).first()
+            if user_match:
+                auth_username = user_match.get_username()
+
+        user = authenticate(request, username=auth_username, password=password)
         if user is None or not user.is_active or not (user.is_staff or user.is_superuser):
             return Response(
                 {'detail': 'Usuario o contraseña incorrectos.'},
