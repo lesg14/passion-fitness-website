@@ -10,11 +10,11 @@ from apps.members.models import Member
 
 def calcular_estadisticas(hoy=None):
     hoy = hoy or timezone.localdate()
-    limite = hoy + timedelta(days=7)
+    limite = hoy + timedelta(days=3)
     vigentes = Membership.objects.filter(fecha_inicio__lte=hoy, fecha_fin__gte=hoy)
     total = Member.objects.count()
     activos = vigentes.values("member").distinct().count()
-    # Activos cuya membresía más larga termina en los próximos 7 días
+    # Activos cuya membresía más larga termina en los próximos 3 días (hoy, mañana, en 2 días o en 3 días)
     por_vencer = (
         Membership.objects.filter(member__in=vigentes.values("member"), fecha_fin__gte=hoy)
         .values("member")

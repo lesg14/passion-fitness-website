@@ -5,7 +5,7 @@
 
 ## Contexto
 
-`frontend/` contiene una aplicación React/Vite con punto de entrada propio. La versión anterior del dashboard se renderizaba en plantillas Django y cargaba CSS/JavaScript desde `frontend/static`. React contiene actualmente datos locales de demostración y no está conectado al backend mediante una API.
+`frontend/` contiene una aplicación React/Vite con punto de entrada propio. La versión anterior del dashboard se renderizaba en plantillas Django y cargaba CSS/JavaScript desde `frontend/static`.
 
 ## Decisión
 
@@ -13,11 +13,11 @@ Usar React/Vite como la única interfaz del dashboard y retirar la presentación
 
 ## Motivos
 
-La aplicación React ya tiene estructura, componentes y configuración Vite. Mantener dos implementaciones de la interfaz creaba rutas de presentación paralelas. La integración API queda como trabajo futuro y no forma parte de esta decisión.
+La aplicación React es la única interfaz del dashboard. Django conserva el dominio, la API y la administración; mantener dos implementaciones de la interfaz creaba rutas de presentación paralelas.
 
 ## Consecuencias
 
 - React/Vite es la fuente de la interfaz y se inicia desde `frontend/`.
 - Las plantillas y recursos específicos del dashboard Django fueron retirados; Django Admin mantiene sus propias plantillas y archivos estáticos.
-- Los datos y acciones React aún no persisten en Django; se necesita diseñar e implementar la API antes de usar datos reales.
+- La API de Django persiste las operaciones de miembros y pagos; la interfaz usa sesiones staff y CSRF.
 - Django deja de servir la página del dashboard en la ruta raíz.

@@ -30,7 +30,8 @@ class FlujoPagosTests(TestCase):
         self.assertEqual(sorted(s["planes_labels"]), ["Mensual", "Semanal"])
 
     def test_por_vencer(self):
-        registrar_pago(self.m1, self.semanal, "efectivo", fecha=self.hoy)
+        tres_dias = Plan.objects.create(nombre="3 Días", precio_cop=15000, duracion_dias=3)
+        registrar_pago(self.m1, tres_dias, "efectivo", fecha=self.hoy)
         registrar_pago(self.m2, self.mensual, "efectivo", fecha=self.hoy)
         self.assertEqual(calcular_estadisticas(self.hoy)["por_vencer"], 1)
 
