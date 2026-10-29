@@ -22,6 +22,14 @@ def calcular_estadisticas(hoy=None):
         .filter(fin__lte=limite)
         .count()
     )
+    # Miembros con membresía futura (próxima a iniciar) que no tienen membresía activa hoy
+    proximos = (
+        Membership.objects.filter(fecha_inicio__gt=hoy)
+        .exclude(member__in=vigentes.values("member"))
+        .values("member")
+        .distinct()
+        .count()
+    )
     pagos = Payment.objects.filter(anulado=False)
     desde = (hoy.replace(day=1) - timedelta(days=150)).replace(day=1)
     ingresos = (
@@ -36,7 +44,8 @@ def calcular_estadisticas(hoy=None):
     return {
         "total": total,
         "activos": activos,
-        "vencidos": total - activos,
+        "proximos": proximos,
+        "vencidos": max(total - activos - proximos, 0),
         "por_vencer": por_vencer,
         "ingresos_mes": pagos.filter(fecha__year=hoy.year, fecha__month=hoy.month).aggregate(t=Sum("monto_cop"))["t"]
         or 0,

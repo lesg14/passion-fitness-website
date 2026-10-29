@@ -114,6 +114,44 @@ class DashboardApiTests(TestCase):
         self.assertEqual(Payment.objects.count(), 2)
         self.assertEqual(Payment.objects.order_by('-id').first().registrado_por, self.staff)
 
+    def test_payment_endpoint_with_custom_plan_and_custom_start_date(self):
+        plan_tradicional = Plan.objects.create(nombre='Tradicional', precio_cop=120000, duracion_dias=90)
+        self.client.force_login(self.staff)
+        token = self.csrf_token()
+        custom_date = (timezone.localdate() + timedelta(days=5)).isoformat()
+        response = self.client.post(
+            '/api/payments/',
+            data=json.dumps({
+                'member_id': self.member.id,
+                'plan_id': plan_tradicional.id,
+                'metodo': 'daviplata',
+                'fecha_inicio': custom_date,
+            }),
+            content_type='application/json',
+            HTTP_X_CSRFTOKEN=token,
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()['membresia']['fecha_inicio'], custom_date)
+
+        # Al consultar el miembro, ahora su plan es 'Tradicional'
+        member_resp = self.client.get('/api/members/').json()
+        self.assertEqual(member_resp[0]['plan'], 'Tradicional')
+        self.assertEqual(member_resp[0]['fecha_inicio'], custom_date)
+
+    def test_payment_list_and_filter_by_member(self):
+        registrar_pago(self.member, self.plan, 'efectivo')
+        self.client.force_login(self.staff)
+        resp = self.client.get('/api/payments/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertGreaterEqual(len(resp.json()), 1)
+        self.assertEqual(resp.json()[0]['member_id'], self.member.id)
+        self.assertEqual(resp.json()[0]['member_nombre'], 'Ana Gómez')
+
+        # Filtro por member_id
+        filtered_resp = self.client.get(f'/api/payments/?member_id={self.member.id}')
+        self.assertEqual(filtered_resp.status_code, 200)
+        self.assertEqual(len(filtered_resp.json()), 1)
+
     def test_login_requires_csrf_and_only_accepts_staff_or_admin(self):
         client = Client(enforce_csrf_checks=True)
         response = client.post(

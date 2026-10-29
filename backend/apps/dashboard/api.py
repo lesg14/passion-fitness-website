@@ -114,6 +114,7 @@ class DashboardView(APIView):
             'metrics': {
                 'miembros': stats['total'],
                 'activos': stats['activos'],
+                'proximos': stats.get('proximos', 0),
                 'vencidos': stats['vencidos'],
                 'por_vencer': stats['por_vencer'],
                 'ingresos_mes': stats['ingresos_mes'],
@@ -170,6 +171,7 @@ class MemberSerializer(serializers.ModelSerializer):
     plan = serializers.SerializerMethodField()
     plan_id = serializers.SerializerMethodField()
     fecha_fin = serializers.SerializerMethodField()
+    fecha_inicio = serializers.SerializerMethodField()
     estado = serializers.SerializerMethodField()
     iniciales = serializers.SerializerMethodField()
 
@@ -187,6 +189,7 @@ class MemberSerializer(serializers.ModelSerializer):
             'plan',
             'plan_id',
             'fecha_fin',
+            'fecha_inicio',
             'estado',
             'iniciales',
         )
@@ -211,39 +214,47 @@ class MemberSerializer(serializers.ModelSerializer):
             None,
         )
 
-    def _most_recent(self, obj):
-        return self._vigente(obj) or (self._memberships(obj)[0] if self._memberships(obj) else None)
+    def _latest(self, obj):
+        memberships = self._memberships(obj)
+        return memberships[0] if memberships else None
 
     def get_plan(self, obj):
-        membership = self._most_recent(obj)
+        membership = self._latest(obj)
         return membership.plan.nombre if membership else ''
 
     def get_plan_id(self, obj):
-        membership = self._most_recent(obj)
+        membership = self._latest(obj)
         return membership.plan_id if membership else None
 
+    def get_fecha_inicio(self, obj):
+        membership = self._latest(obj)
+        return membership.fecha_inicio.isoformat() if membership else None
+
     def get_fecha_fin(self, obj):
-        membership = self._most_recent(obj)
+        membership = self._latest(obj)
         return membership.fecha_fin.isoformat() if membership else None
 
     def get_estado(self, obj):
         today = timezone.localdate()
-        membership = self._vigente(obj)
-        if membership:
-            dias = (membership.fecha_fin - today).days
-            if dias == 0:
-                return 'Vence hoy'
-            elif dias == 1:
-                return 'Vence mañana'
-            elif dias == 2:
-                return 'Vence en 2 días'
-            elif dias == 3:
-                return 'Vence en 3 días'
-            return 'Activo'
-        recent = self._most_recent(obj)
-        if recent and recent.fecha_inicio > today:
+        memberships = self._memberships(obj)
+        if not memberships:
+            return 'Sin membresía'
+        latest = memberships[0]
+        if latest.fecha_fin < today:
+            return 'Vencido'
+        vigente = self._vigente(obj)
+        if not vigente and latest.fecha_inicio > today:
             return 'Próxima'
-        return 'Vencido' if recent else 'Sin membresía'
+        dias = (latest.fecha_fin - today).days
+        if dias == 0:
+            return 'Vence hoy'
+        elif dias == 1:
+            return 'Vence mañana'
+        elif dias == 2:
+            return 'Vence en 2 días'
+        elif dias == 3:
+            return 'Vence en 3 días'
+        return 'Activo'
 
     def get_iniciales(self, obj):
         return ''.join(part[0] for part in (obj.nombres, obj.apellidos) if part).upper()[:2]
@@ -256,6 +267,7 @@ class MemberRegistrationSerializer(serializers.Serializer):
     numero_documento = serializers.CharField(max_length=20)
     telefono = serializers.CharField(max_length=20, required=False, allow_blank=True)
     email = serializers.EmailField(required=False, allow_blank=True)
+    fecha_inicio = serializers.DateField(required=False, allow_null=True)
     acepta_datos = serializers.BooleanField(write_only=True)
     plan_id = serializers.PrimaryKeyRelatedField(source='plan', queryset=Plan.objects.filter(activo=True))
     metodo = serializers.ChoiceField(choices=Payment.Metodo.choices)
@@ -278,6 +290,7 @@ class MemberRegistrationSerializer(serializers.Serializer):
     def create(self, validated_data):
         plan = validated_data.pop('plan')
         metodo = validated_data.pop('metodo')
+        fecha_inicio = validated_data.pop('fecha_inicio', None)
         validated_data.pop('acepta_datos')
         member = Member.objects.create(acepta_datos_en=timezone.now(), **validated_data)
         registrar_pago(
@@ -285,6 +298,7 @@ class MemberRegistrationSerializer(serializers.Serializer):
             plan,
             metodo,
             usuario=self.context['request'].user,
+            fecha_inicio=fecha_inicio,
         )
         return member
 
@@ -362,6 +376,7 @@ class PaymentCreateSerializer(serializers.Serializer):
     metodo = serializers.ChoiceField(choices=Payment.Metodo.choices)
     monto_cop = serializers.IntegerField(min_value=1, required=False)
     referencia = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    fecha_inicio = serializers.DateField(required=False, allow_null=True)
 
     def create(self, validated_data):
         return registrar_pago(
@@ -371,13 +386,75 @@ class PaymentCreateSerializer(serializers.Serializer):
             monto_cop=validated_data.get('monto_cop'),
             referencia=validated_data.get('referencia', ''),
             usuario=self.context['request'].user,
+            fecha_inicio=validated_data.get('fecha_inicio'),
         )
 
 
-class PaymentCreateView(generics.GenericAPIView):
-    serializer_class = PaymentCreateSerializer
+class PaymentSerializer(serializers.ModelSerializer):
+    member_id = serializers.IntegerField(source='member.id', read_only=True)
+    member_nombre = serializers.SerializerMethodField()
+    member_tipo_documento = serializers.CharField(source='member.tipo_documento', read_only=True)
+    member_numero_documento = serializers.CharField(source='member.numero_documento', read_only=True)
+    member_telefono = serializers.CharField(source='member.telefono', read_only=True)
+    member_email = serializers.CharField(source='member.email', read_only=True)
+    plan_nombre = serializers.CharField(source='membership.plan.nombre', read_only=True)
+    fecha_inicio = serializers.DateField(source='membership.fecha_inicio', read_only=True)
+    fecha_fin = serializers.DateField(source='membership.fecha_fin', read_only=True)
+    registrado_por_nombre = serializers.SerializerMethodField()
+    metodo_display = serializers.CharField(source='get_metodo_display', read_only=True)
 
-    def post(self, request):
+    class Meta:
+        model = Payment
+        fields = (
+            'id',
+            'member_id',
+            'member_nombre',
+            'member_tipo_documento',
+            'member_numero_documento',
+            'member_telefono',
+            'member_email',
+            'plan_nombre',
+            'fecha_inicio',
+            'fecha_fin',
+            'monto_cop',
+            'metodo',
+            'metodo_display',
+            'fecha',
+            'referencia',
+            'anulado',
+            'registrado_por_nombre',
+        )
+
+    def get_member_nombre(self, obj):
+        return f"{obj.member.nombres} {obj.member.apellidos}"
+
+    def get_registrado_por_nombre(self, obj):
+        return obj.registrado_por.get_username() if obj.registrado_por else 'Sistema'
+
+
+class PaymentListCreateView(generics.ListCreateAPIView):
+    def get_serializer_class(self):
+        if self.request.method == 'POST':
+            return PaymentCreateSerializer
+        return PaymentSerializer
+
+    def get_queryset(self):
+        qs = Payment.objects.select_related('member', 'membership__plan', 'registrado_por').order_by('-fecha', '-id')
+        member_id = self.request.query_params.get('member_id')
+        if member_id:
+            qs = qs.filter(member_id=member_id)
+        search = self.request.query_params.get('search', '').strip()
+        if search:
+            qs = qs.filter(
+                Q(member__nombres__icontains=search)
+                | Q(member__apellidos__icontains=search)
+                | Q(member__numero_documento__icontains=search)
+                | Q(referencia__icontains=search)
+                | Q(membership__plan__nombre__icontains=search)
+            )
+        return qs
+
+    def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         payment = serializer.save()

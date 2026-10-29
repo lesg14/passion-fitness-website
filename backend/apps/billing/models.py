@@ -51,11 +51,14 @@ class Payment(models.Model):
 
 
 @transaction.atomic
-def registrar_pago(member, plan, metodo, monto_cop=None, fecha=None, referencia="", usuario=None):
-    """Registra un pago y crea la membresía. Si hay una vigente, la nueva inicia al terminar esa."""
+def registrar_pago(member, plan, metodo, monto_cop=None, fecha=None, referencia="", usuario=None, fecha_inicio=None):
+    """Registra un pago y crea la membresía. Si se especifica fecha_inicio se usa; de lo contrario inicia al terminar la última vigente."""
     fecha = fecha or timezone.localdate()
-    ultima = member.memberships.filter(fecha_fin__gte=fecha).order_by("-fecha_fin").first()
-    inicio = ultima.fecha_fin + timedelta(days=1) if ultima else fecha
+    if fecha_inicio:
+        inicio = fecha_inicio
+    else:
+        ultima = member.memberships.filter(fecha_fin__gte=fecha).order_by("-fecha_fin").first()
+        inicio = ultima.fecha_fin + timedelta(days=1) if ultima else fecha
     membership = Membership.objects.create(
         member=member, plan=plan, fecha_inicio=inicio, fecha_fin=inicio + timedelta(days=plan.duracion_dias - 1)
     )

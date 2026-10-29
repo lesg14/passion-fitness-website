@@ -7,7 +7,7 @@ from .api import (
     LogoutView,
     MemberDetailView,
     MemberListCreateView,
-    PaymentCreateView,
+    PaymentListCreateView,
     PaymentVoidView,
     PlanDetailView,
     PlanListCreateView,
@@ -24,6 +24,6 @@ urlpatterns = [
     path('plans/<int:pk>/', PlanDetailView.as_view(), name='api-plan-detail'),
     path('members/', MemberListCreateView.as_view(), name='api-members'),
     path('members/<int:pk>/', MemberDetailView.as_view(), name='api-member-detail'),
-    path('payments/', PaymentCreateView.as_view(), name='api-payments'),
+    path('payments/', PaymentListCreateView.as_view(), name='api-payments'),
     path('payments/<int:pk>/void/', PaymentVoidView.as_view(), name='api-payment-void'),
 ]
