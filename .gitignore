@@ -6,3 +6,5 @@ db.sqlite3
 staticfiles/
 frontend/dist/
 .env
+.env.*
+!.env.example

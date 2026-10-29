@@ -11,21 +11,43 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 from pathlib import Path
+import os
+
+from dotenv import load_dotenv
+from django.core.exceptions import ImproperlyConfigured
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR.parent / '.env')
+
+
+def env_bool(name, default=False):
+    value = os.getenv(name)
+    return default if value is None else value.strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
+def env_list(name, default=()):
+    value = os.getenv(name)
+    return [item.strip() for item in value.split(',') if item.strip()] if value is not None else list(default)
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-6)uy5azdhc(2@v+2#nn+#b5rotox9h(ulu^m35gx!sea0l!dan'
+DEBUG = env_bool('DJANGO_DEBUG', True)
+SECRET_KEY = os.getenv('DJANGO_SECRET_KEY')
+if not SECRET_KEY:
+    if not DEBUG:
+        raise ImproperlyConfigured('Define DJANGO_SECRET_KEY para entornos que no sean de desarrollo.')
+    SECRET_KEY = 'django-insecure-local-development-only-do-not-use-in-production'
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
-
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = env_list(
+    'DJANGO_ALLOWED_HOSTS',
+    ('localhost', '127.0.0.1') if DEBUG else (),
+)
+if not DEBUG and not ALLOWED_HOSTS:
+    raise ImproperlyConfigured('Define DJANGO_ALLOWED_HOSTS para entornos que no sean de desarrollo.')
 
 
 # Application definition
@@ -77,12 +99,37 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+DB_ENGINE = os.getenv('DB_ENGINE', 'sqlite').strip().lower()
+if DB_ENGINE == 'postgresql':
+    required_db_settings = ('DB_NAME', 'DB_USER', 'DB_PASSWORD')
+    missing_db_settings = [name for name in required_db_settings if not os.getenv(name)]
+    if missing_db_settings:
+        raise ImproperlyConfigured(f'Faltan variables para PostgreSQL: {", ".join(missing_db_settings)}.')
+    db_options = {'sslmode': os.getenv('DB_SSLMODE', 'prefer')}
+    db_sslrootcert = os.getenv('DB_SSLROOTCERT')
+    if db_sslrootcert:
+        db_options['sslrootcert'] = db_sslrootcert
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': os.environ['DB_NAME'],
+            'USER': os.environ['DB_USER'],
+            'PASSWORD': os.environ['DB_PASSWORD'],
+            'HOST': os.getenv('DB_HOST', '127.0.0.1'),
+            'PORT': os.getenv('DB_PORT', '5432'),
+            'CONN_MAX_AGE': int(os.getenv('DB_CONN_MAX_AGE', '60')),
+            'OPTIONS': db_options,
+        }
     }
-}
+elif DB_ENGINE == 'sqlite':
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
+else:
+    raise ImproperlyConfigured('DB_ENGINE debe ser sqlite o postgresql.')
 
 
 # Password validation
@@ -113,10 +160,22 @@ TIME_ZONE = 'America/Bogota'
 
 LOGIN_URL = '/admin/login/'
 LOGIN_REDIRECT_URL = '/'
-CSRF_TRUSTED_ORIGINS = [
-    'http://localhost:5173',
-    'http://127.0.0.1:5173',
-]
+CSRF_TRUSTED_ORIGINS = env_list(
+    'DJANGO_CSRF_TRUSTED_ORIGINS',
+    ('http://localhost:5173', 'http://127.0.0.1:5173') if DEBUG else (),
+)
+
+if not DEBUG:
+    SECURE_SSL_REDIRECT = env_bool('DJANGO_SECURE_SSL_REDIRECT', True)
+    SECURE_HSTS_SECONDS = int(os.getenv('DJANGO_SECURE_HSTS_SECONDS', '3600'))
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool('DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS', False)
+    SECURE_HSTS_PRELOAD = env_bool('DJANGO_SECURE_HSTS_PRELOAD', False)
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
+    if env_bool('DJANGO_BEHIND_HTTPS_PROXY', True):
+        SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
