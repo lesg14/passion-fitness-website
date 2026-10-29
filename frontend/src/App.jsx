@@ -3,6 +3,7 @@ import {
   Activity,
   AlertTriangle,
   ArrowLeft,
+  ArrowUpRight,
   CalendarDays,
   Check,
   ChevronDown,
@@ -13,6 +14,7 @@ import {
   LayoutDashboard,
   LogOut,
   Plus,
+  Receipt,
   Search,
   Settings2,
   ShieldCheck,
@@ -44,9 +46,36 @@ const formatDate = (value) =>
       )
     : 'Sin membresía';
 
+function addDaysToDate(dateString, days) {
+  if (!dateString || !days) return '';
+  const [y, m, d] = dateString.split('-').map(Number);
+  if (isNaN(y) || isNaN(m) || isNaN(d)) return '';
+  const date = new Date(Date.UTC(y, m - 1, d));
+  date.setUTCDate(date.getUTCDate() + (Number(days) - 1));
+  return date.toISOString().split('T')[0];
+}
+
+function getTodayString() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function getTomorrowOrNextDayString(dateString) {
+  if (!dateString) return getTodayString();
+  const [y, m, d] = dateString.split('-').map(Number);
+  if (isNaN(y) || isNaN(m) || isNaN(d)) return getTodayString();
+  const date = new Date(Date.UTC(y, m - 1, d));
+  date.setUTCDate(date.getUTCDate() + 1);
+  return date.toISOString().split('T')[0];
+}
+
 function renderStatusPill(estado) {
   let tone = 'status-inactive';
   if (estado === 'Activo') tone = 'status-active';
+  else if (estado === 'Próxima') tone = 'status-upcoming';
   else if (estado === 'Vence hoy') tone = 'status-urgent';
   else if (['Vence mañana', 'Vence en 2 días', 'Vence en 3 días'].includes(estado)) tone = 'status-due';
   return (
@@ -59,6 +88,7 @@ function renderStatusPill(estado) {
 
 function getAvatarTone(estado) {
   if (estado === 'Activo') return 'mint';
+  if (estado === 'Próxima') return 'blue';
   if (estado === 'Vence hoy') return 'coral';
   if (['Vence mañana', 'Vence en 2 días', 'Vence en 3 días'].includes(estado)) return 'coral';
   return 'lilac';
@@ -154,7 +184,7 @@ function LoginScreen({ onLogin, connectionError }) {
               required
               value={username}
               onChange={(event) => setUsername(event.target.value)}
-              placeholder="passion-fitness o pasion@gmail.com"
+              placeholder="Ingresa tu usuario o correo"
             />
           </label>
           <label>
@@ -199,6 +229,7 @@ function MemberDialog({ plans, onClose, onAdd }) {
     numero_documento: '',
     telefono: '',
     email: '',
+    fecha_inicio: getTodayString(),
     plan_id: plans[0]?.id || '',
     metodo: 'efectivo',
     acepta_datos: false,
@@ -210,6 +241,11 @@ function MemberDialog({ plans, onClose, onAdd }) {
       ...current,
       [field]: event.target.type === 'checkbox' ? event.target.checked : event.target.value,
     }));
+
+  const selectedPlan = plans.find((p) => p.id === Number(form.plan_id)) || plans[0];
+  const calculatedEndDate = form.fecha_inicio && selectedPlan
+    ? addDaysToDate(form.fecha_inicio, selectedPlan.duracion_dias)
+    : '';
 
   async function submit(event) {
     event.preventDefault();
@@ -223,6 +259,7 @@ function MemberDialog({ plans, onClose, onAdd }) {
       await onAdd({
         ...form,
         plan_id: Number(form.plan_id),
+        fecha_inicio: form.fecha_inicio,
       });
     } catch (saveError) {
       setError(saveError.message);
@@ -308,6 +345,33 @@ function MemberDialog({ plans, onClose, onAdd }) {
               </select>
             </label>
           </div>
+
+          <div className="form-row">
+            <label>
+              Fecha inicial
+              <input
+                type="date"
+                required
+                value={form.fecha_inicio}
+                onChange={update('fecha_inicio')}
+              />
+            </label>
+            <label>
+              Fecha final (calculada según el plan)
+              <input
+                type="text"
+                readOnly
+                disabled
+                value={
+                  calculatedEndDate
+                    ? `${formatDate(calculatedEndDate)} (${selectedPlan?.duracion_dias || 0} días)`
+                    : 'Selecciona plan y fecha'
+                }
+                style={{ background: '#f5f7f4', color: '#27342a', fontWeight: 600, cursor: 'not-allowed' }}
+              />
+            </label>
+          </div>
+
           <label className="consent-field">
             <input type="checkbox" required checked={form.acepta_datos} onChange={update('acepta_datos')} />
             <span>Autorizo el tratamiento de datos personales del miembro (Ley 1581).</span>
@@ -332,8 +396,24 @@ function RenewPaymentDialog({ member, plans, onClose, onSuccess }) {
   const [montoCop, setMontoCop] = useState(initialPlan?.precio_cop || '');
   const [metodo, setMetodo] = useState('efectivo');
   const [referencia, setReferencia] = useState('');
+
+  const todayStr = getTodayString();
+  const defaultStartDate = useMemo(() => {
+    if (member?.fecha_fin && member.fecha_fin >= todayStr) {
+      return getTomorrowOrNextDayString(member.fecha_fin);
+    }
+    return todayStr;
+  }, [member?.fecha_fin, todayStr]);
+
+  const [fechaInicio, setFechaInicio] = useState(defaultStartDate);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+
+  const selectedPlan = plans.find((p) => p.id === Number(planId)) || initialPlan;
+
+  const calculatedEndDate = fechaInicio && selectedPlan
+    ? addDaysToDate(fechaInicio, selectedPlan.duracion_dias)
+    : '';
 
   const handlePlanChange = (event) => {
     const selectedId = Number(event.target.value);
@@ -355,9 +435,10 @@ function RenewPaymentDialog({ member, plans, onClose, onSuccess }) {
           metodo,
           monto_cop: Number(montoCop),
           referencia,
+          fecha_inicio: fechaInicio,
         },
       });
-      onSuccess(`Pago de ${formatCurrency(montoCop)} registrado con éxito para ${member.nombre}.`);
+      onSuccess(`Pago de ${formatCurrency(montoCop)} (${selectedPlan?.nombre}) registrado con éxito para ${member.nombre}.`);
       onClose();
     } catch (requestError) {
       setError(requestError.message);
@@ -385,9 +466,10 @@ function RenewPaymentDialog({ member, plans, onClose, onSuccess }) {
           <div>
             <strong>Estado actual: {member.estado}</strong>
             <span>
+              {member.plan ? `Plan registrado: ${member.plan}. ` : ''}
               {isVigente
-                ? `Vence el ${formatDate(member.fecha_fin)}. La nueva vigencia iniciará el día posterior.`
-                : 'Sin membresía vigente. La nueva vigencia iniciará a partir de hoy.'}
+                ? `Vence el ${formatDate(member.fecha_fin)}. La fecha de inicio sugerida es el día posterior, o puedes personalizarla.`
+                : 'Sin membresía vigente. La fecha inicial sugerida es hoy.'}
             </span>
           </div>
         </div>
@@ -409,6 +491,32 @@ function RenewPaymentDialog({ member, plans, onClose, onSuccess }) {
               ))}
             </select>
           </label>
+
+          <div className="form-row">
+            <label>
+              Fecha inicial
+              <input
+                type="date"
+                required
+                value={fechaInicio}
+                onChange={(event) => setFechaInicio(event.target.value)}
+              />
+            </label>
+            <label>
+              Fecha final (calculada según el plan)
+              <input
+                type="text"
+                readOnly
+                disabled
+                value={
+                  calculatedEndDate
+                    ? `${formatDate(calculatedEndDate)} (${selectedPlan?.duracion_dias || 0} días)`
+                    : 'Selecciona plan y fecha'
+                }
+                style={{ background: '#f5f7f4', color: '#27342a', fontWeight: 600, cursor: 'not-allowed' }}
+              />
+            </label>
+          </div>
 
           <div className="form-row">
             <label>
@@ -797,6 +905,356 @@ function DeletePlanConfirmDialog({ plan, onClose, onSuccess }) {
           </button>
         </div>
       </section>
+    </div>
+  );
+}
+
+function MembersManagementView({
+  members,
+  plans,
+  isAdmin,
+  onBackToDashboard,
+  onNavigateToHistory,
+  showToast,
+  onRefreshData,
+}) {
+  const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('todos');
+  const [showAddMemberDialog, setShowAddMemberDialog] = useState(false);
+  const [selectedMemberForRenewal, setSelectedMemberForRenewal] = useState(null);
+  const [selectedMemberForEdit, setSelectedMemberForEdit] = useState(null);
+  const [selectedMemberForDelete, setSelectedMemberForDelete] = useState(null);
+
+  const { filteredMembers, counts } = useMemo(() => {
+    let act = 0;
+    let porVenc = 0;
+    let prox = 0;
+    let venc = 0;
+    const term = query.toLocaleLowerCase('es').trim();
+
+    members.forEach((m) => {
+      if (m.estado === 'Activo') act++;
+      else if (['Vence hoy', 'Vence mañana', 'Vence en 2 días', 'Vence en 3 días'].includes(m.estado)) porVenc++;
+      else if (m.estado === 'Próxima') prox++;
+      else if (m.estado === 'Vencido' || m.estado === 'Sin membresía') venc++;
+    });
+
+    const filtered = members.filter((member) => {
+      const matchText =
+        !term ||
+        `${member.nombre} ${member.email || ''} ${member.plan || ''} ${member.numero_documento || ''} ${member.telefono || ''}`
+          .toLocaleLowerCase('es')
+          .includes(term);
+
+      if (!matchText) return false;
+
+      if (statusFilter === 'activos') return member.estado === 'Activo';
+      if (statusFilter === 'por_vencer')
+        return ['Vence hoy', 'Vence mañana', 'Vence en 2 días', 'Vence en 3 días'].includes(member.estado);
+      if (statusFilter === 'proximos') return member.estado === 'Próxima';
+      if (statusFilter === 'vencidos') return member.estado === 'Vencido' || member.estado === 'Sin membresía';
+      return true;
+    });
+
+    return {
+      filteredMembers: filtered,
+      counts: {
+        todos: members.length,
+        activos: act,
+        por_vencer: porVenc,
+        proximos: prox,
+        vencidos: venc,
+      },
+    };
+  }, [members, query, statusFilter]);
+
+  async function handleCreateMember(data) {
+    const member = await apiRequest('/members/', { method: 'POST', body: data });
+    setShowAddMemberDialog(false);
+    showToast(`¡Miembro ${member.nombre} registrado con éxito!`);
+    onRefreshData();
+  }
+
+  return (
+    <div className="page-wrap">
+      <section className="page-heading">
+        <div>
+          <p className="eyebrow">ADMINISTRACIÓN DEL CLUB</p>
+          <h1>
+            Gestión de Miembros<span>.</span>
+          </h1>
+          <p className="page-subtitle">
+            Directorio completo de deportistas, registro de altas, edición de datos, estados de membresía y renovaciones.
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="button button-quiet" type="button" onClick={onBackToDashboard}>
+            <ArrowLeft size={16} /> Volver al Resumen
+          </button>
+          <button
+            className="button button-primary"
+            type="button"
+            onClick={() => setShowAddMemberDialog(true)}
+          >
+            <Plus size={16} /> Nuevo Miembro
+          </button>
+        </div>
+      </section>
+
+      {/* 5 Tarjetas informativas */}
+      <section className="members-metrics-grid" aria-label="Estadísticas de miembros">
+        <Metric
+          icon={Users}
+          label="Total de miembros"
+          value={counts.todos}
+          caption="Deportistas registrados"
+          tone="blue"
+        />
+        <Metric
+          icon={Check}
+          label="Membresías activas"
+          value={counts.activos}
+          caption="Acceso vigente al gimnasio"
+          tone="green"
+        />
+        <Metric
+          icon={CalendarDays}
+          label="Por vencer (≤3 días)"
+          value={counts.por_vencer}
+          caption="Vence hoy o en ≤3 días"
+          tone="orange"
+        />
+        <Metric
+          icon={Activity}
+          label="Próximas a iniciar"
+          value={counts.proximos}
+          caption="Membresías agendadas"
+          tone="blue"
+        />
+        <Metric
+          icon={AlertTriangle}
+          label="Vencidos / Inactivos"
+          value={counts.vencidos}
+          caption="Sin membresía vigente"
+          tone="pink"
+        />
+      </section>
+
+      {/* Tabla CRUD de Miembros */}
+      <section className="panel members-panel" style={{ padding: '22px 24px' }}>
+        <div className="panel-heading" style={{ marginBottom: 14 }}>
+          <div>
+            <p className="eyebrow">DIRECTORIO DEPORTISTAS</p>
+            <h2>Listado y administración de miembros</h2>
+          </div>
+          <div className="member-tools">
+            <label className="search-field">
+              <Search size={16} />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Buscar por nombre, documento, correo..."
+                aria-label="Buscar miembro"
+              />
+            </label>
+            {query && (
+              <button className="button button-quiet" type="button" onClick={() => setQuery('')}>
+                Limpiar
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Barra de filtros de estado */}
+        <div className="filter-toolbar" style={{ marginBottom: 14 }}>
+          <div className="filter-tabs" role="tablist" aria-label="Filtro de miembros">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={statusFilter === 'todos'}
+              className={`filter-tab ${statusFilter === 'todos' ? 'active' : ''}`}
+              onClick={() => setStatusFilter('todos')}
+            >
+              Todos <span className="filter-count">{counts.todos}</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={statusFilter === 'activos'}
+              className={`filter-tab ${statusFilter === 'activos' ? 'active' : ''}`}
+              onClick={() => setStatusFilter('activos')}
+            >
+              Activos <span className="filter-count">{counts.activos}</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={statusFilter === 'por_vencer'}
+              className={`filter-tab ${statusFilter === 'por_vencer' ? 'active' : ''}`}
+              onClick={() => setStatusFilter('por_vencer')}
+            >
+              Por vencer (≤3d) <span className="filter-count">{counts.por_vencer}</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={statusFilter === 'proximos'}
+              className={`filter-tab ${statusFilter === 'proximos' ? 'active' : ''}`}
+              onClick={() => setStatusFilter('proximos')}
+            >
+              Próximas <span className="filter-count">{counts.proximos}</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={statusFilter === 'vencidos'}
+              className={`filter-tab ${statusFilter === 'vencidos' ? 'active' : ''}`}
+              onClick={() => setStatusFilter('vencidos')}
+            >
+              Vencidos <span className="filter-count">{counts.vencidos}</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>MIEMBRO</th>
+                <th>DOCUMENTO</th>
+                <th>PLAN ACTUAL</th>
+                <th>VENCIMIENTO</th>
+                <th>ESTADO</th>
+                <th style={{ textAlign: 'right', paddingRight: 14 }}>ACCIONES</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredMembers.length ? (
+                filteredMembers.map((member) => (
+                  <tr key={member.id}>
+                    <td>
+                      <div className="member-cell">
+                        <span className={`member-avatar ${getAvatarTone(member.estado)}`}>
+                          {member.iniciales}
+                        </span>
+                        <span>
+                          <strong>{member.nombre}</strong>
+                          <small>
+                            {member.telefono ? member.telefono : ''}
+                            {member.telefono && member.email ? ' · ' : ''}
+                            {member.email ? member.email : (!member.telefono ? 'Sin contacto' : '')}
+                          </small>
+                        </span>
+                      </div>
+                    </td>
+                    <td>
+                      <span style={{ fontSize: 11, color: '#334035', fontWeight: 600 }}>
+                        {member.tipo_documento} {member.numero_documento}
+                      </span>
+                    </td>
+                    <td className="plan-cell">
+                      <strong style={{ color: '#27342a' }}>{member.plan || 'Sin plan'}</strong>
+                    </td>
+                    <td className="date-cell">
+                      {formatDate(member.fecha_fin)}
+                    </td>
+                    <td>{renderStatusPill(member.estado)}</td>
+                    <td>
+                      <div className="member-actions">
+                        <button
+                          className="action-btn action-renew"
+                          type="button"
+                          onClick={() => setSelectedMemberForRenewal(member)}
+                          title="Renovar membresía o cobrar"
+                        >
+                          <CreditCard size={12} /> Renovar / Cobrar
+                        </button>
+                        <button
+                          className="action-btn"
+                          type="button"
+                          onClick={() => onNavigateToHistory(member.id)}
+                          title="Ver historial de pagos del miembro"
+                        >
+                          <Receipt size={12} /> Historial
+                        </button>
+                        <button
+                          className="action-btn"
+                          type="button"
+                          onClick={() => setSelectedMemberForEdit(member)}
+                          title="Editar datos del miembro"
+                        >
+                          <Edit2 size={12} /> Editar
+                        </button>
+                        {isAdmin && (
+                          <button
+                            className="action-btn action-delete"
+                            type="button"
+                            onClick={() => setSelectedMemberForDelete(member)}
+                            title="Eliminar miembro"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="6" className="empty-state">
+                    {query || statusFilter !== 'todos'
+                      ? 'No hay miembros que coincidan con los filtros aplicados.'
+                      : 'Todavía no hay miembros registrados.'}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* Diálogos modales de la vista de gestión de miembros */}
+      {showAddMemberDialog && (
+        <MemberDialog
+          plans={plans}
+          onClose={() => setShowAddMemberDialog(false)}
+          onAdd={handleCreateMember}
+        />
+      )}
+
+      {selectedMemberForRenewal && (
+        <RenewPaymentDialog
+          member={selectedMemberForRenewal}
+          plans={plans}
+          onClose={() => setSelectedMemberForRenewal(null)}
+          onSuccess={(msg) => {
+            showToast(msg);
+            onRefreshData();
+          }}
+        />
+      )}
+
+      {selectedMemberForEdit && (
+        <EditMemberDialog
+          member={selectedMemberForEdit}
+          onClose={() => setSelectedMemberForEdit(null)}
+          onSuccess={(msg) => {
+            showToast(msg);
+            onRefreshData();
+          }}
+        />
+      )}
+
+      {selectedMemberForDelete && (
+        <DeleteMemberConfirmDialog
+          member={selectedMemberForDelete}
+          onClose={() => setSelectedMemberForDelete(null)}
+          onSuccess={(msg) => {
+            showToast(msg);
+            onRefreshData();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -1219,11 +1677,470 @@ function PlansManagementView({ onBackToDashboard, showToast, onPlanListChanged }
   );
 }
 
+function VoidPaymentConfirmDialog({ payment, onClose, onSuccess }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  async function confirmVoid() {
+    setBusy(true);
+    setError('');
+    try {
+      await apiRequest(`/payments/${payment.id}/void/`, { method: 'POST' });
+      onSuccess(`Pago #${payment.id} de ${formatCurrency(payment.monto_cop)} anulado correctamente.`);
+      onClose();
+    } catch (requestError) {
+      setError(requestError.message);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="dialog-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <section className="dialog" role="dialog" aria-modal="true" aria-labelledby="void-title">
+        <div className="dialog-heading">
+          <div>
+            <span className="eyebrow" style={{ color: '#b73824' }}>
+              ANULACIÓN DE PAGO
+            </span>
+            <h2 id="void-title">Anular pago #{payment.id}</h2>
+          </div>
+          <button className="icon-button" type="button" onClick={onClose} aria-label="Cerrar">
+            <X size={19} />
+          </button>
+        </div>
+
+        <div className="dialog-info-banner warning" style={{ marginBottom: 18 }}>
+          <AlertTriangle size={20} style={{ flexShrink: 0, marginTop: 2 }} />
+          <div>
+            <strong>¿Confirmas anular el pago de {formatCurrency(payment.monto_cop)}?</strong>
+            <span>
+              Miembro: {payment.member_nombre}. El pago se registrará como "Anulado" para auditoría y se excluirá de los reportes contables de ingresos.
+            </span>
+          </div>
+        </div>
+
+        {error && (
+          <p className="form-error" role="alert">
+            {error}
+          </p>
+        )}
+
+        <div className="dialog-actions">
+          <button className="button button-quiet" type="button" onClick={onClose}>
+            Cancelar
+          </button>
+          <button
+            className="button"
+            style={{ background: '#b73824', color: '#fff' }}
+            type="button"
+            onClick={confirmVoid}
+            disabled={busy}
+          >
+            {busy ? 'Anulando…' : 'Sí, anular pago'}
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function PaymentHistoryView({
+  members,
+  initialMemberId,
+  isAdmin,
+  onBackToDashboard,
+  onOpenRenew,
+  showToast,
+}) {
+  const [selectedMemberId, setSelectedMemberId] = useState(initialMemberId ? String(initialMemberId) : '');
+  const [payments, setPayments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('todos');
+  const [selectedPaymentForVoid, setSelectedPaymentForVoid] = useState(null);
+
+  async function loadPayments(memberId) {
+    setLoading(true);
+    setError('');
+    try {
+      const url = memberId ? `/payments/?member_id=${memberId}` : '/payments/';
+      const data = await apiRequest(url);
+      setPayments(data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadPayments(selectedMemberId);
+  }, [selectedMemberId]);
+
+  const selectedMember = useMemo(
+    () => members.find((m) => m.id === Number(selectedMemberId)) || null,
+    [members, selectedMemberId]
+  );
+
+  const filteredPayments = useMemo(() => {
+    const term = query.toLowerCase().trim();
+    return payments.filter((p) => {
+      if (term) {
+        const match =
+          (p.member_nombre || '').toLowerCase().includes(term) ||
+          (p.member_numero_documento || '').toLowerCase().includes(term) ||
+          (p.plan_nombre || '').toLowerCase().includes(term) ||
+          (p.referencia || '').toLowerCase().includes(term) ||
+          (p.metodo_display || '').toLowerCase().includes(term);
+        if (!match) return false;
+      }
+      if (statusFilter === 'pagados') return !p.anulado;
+      if (statusFilter === 'anulados') return p.anulado;
+      return true;
+    });
+  }, [payments, query, statusFilter]);
+
+  const stats = useMemo(() => {
+    const valid = payments.filter((p) => !p.anulado);
+    const totalAbonado = valid.reduce((acc, curr) => acc + (curr.monto_cop || 0), 0);
+    const countAnulados = payments.filter((p) => p.anulado).length;
+    const latestPayment = valid[0] || null;
+    return {
+      total: totalAbonado,
+      count: valid.length,
+      anulados: countAnulados,
+      latest: latestPayment,
+    };
+  }, [payments]);
+
+  return (
+    <div className="page-wrap">
+      <section className="page-heading">
+        <div>
+          <p className="eyebrow">CONTABILIDAD Y AUDITORÍA</p>
+          <h1>
+            Historial de Pagos<span>.</span>
+          </h1>
+          <p className="page-subtitle">
+            {selectedMember
+              ? `Historial de pagos y vigencias de ${selectedMember.nombre}.`
+              : 'Registro y auditoría de todas las transacciones de membresías del club.'}
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="button button-quiet" type="button" onClick={onBackToDashboard}>
+            <ArrowLeft size={16} /> Volver al Resumen
+          </button>
+          {selectedMember && (
+            <button
+              className="button button-primary"
+              type="button"
+              onClick={() => onOpenRenew(selectedMember)}
+            >
+              <CreditCard size={16} /> Cobrar / Renovar
+            </button>
+          )}
+        </div>
+      </section>
+
+      {/* Selector interactivo de Miembro con búsqueda por Nombre o Cédula */}
+      <section className="history-selector-banner">
+        <div className="history-selector-left">
+          <label style={{ fontSize: 11, fontWeight: 700, color: '#314235', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Users size={16} /> Miembro seleccionado:
+          </label>
+          <select
+            className="history-select-input"
+            value={selectedMemberId}
+            onChange={(e) => setSelectedMemberId(e.target.value)}
+          >
+            <option value="">— Ver pagos de todos los miembros —</option>
+            {members.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.nombre} (CC {m.numero_documento}) · {m.plan || 'Sin plan'}
+              </option>
+            ))}
+          </select>
+        </div>
+        {selectedMemberId && (
+          <button
+            className="button button-quiet"
+            type="button"
+            onClick={() => setSelectedMemberId('')}
+          >
+            Ver todos los miembros
+          </button>
+        )}
+      </section>
+
+      {/* Tarjeta resumen del miembro seleccionado */}
+      {selectedMember && (
+        <section className="history-member-summary-card">
+          <div className="history-member-info">
+            <span className={`member-avatar ${getAvatarTone(selectedMember.estado)}`} style={{ width: 44, height: 44, fontSize: 13 }}>
+              {selectedMember.iniciales}
+            </span>
+            <div className="history-member-details">
+              <strong>{selectedMember.nombre}</strong>
+              <span>
+                {selectedMember.tipo_documento} {selectedMember.numero_documento}
+                {selectedMember.telefono ? ` · Tel: ${selectedMember.telefono}` : ''}
+                {selectedMember.email ? ` · ${selectedMember.email}` : ''}
+              </span>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div style={{ textAlign: 'right' }}>
+              <span style={{ display: 'block', fontSize: 10, color: '#738377', fontWeight: 600 }}>Plan actual</span>
+              <strong style={{ fontSize: 13, color: '#243428' }}>{selectedMember.plan || 'Sin plan'}</strong>
+            </div>
+            {renderStatusPill(selectedMember.estado)}
+          </div>
+        </section>
+      )}
+
+      {/* Tarjetas informativas de la vista de pagos */}
+      <section className="plans-metrics-grid" aria-label="Estadísticas de pagos">
+        <Metric
+          icon={CreditCard}
+          label={selectedMember ? 'Total abonado por el miembro' : 'Total recaudado en registros'}
+          value={formatCompactCurrency(stats.total)}
+          caption={selectedMember ? 'Pagos no anulados en historial' : 'Ingresos de transacciones válidas'}
+          tone="green"
+        />
+        <Metric
+          icon={Check}
+          label="Pagos válidos registrados"
+          value={stats.count}
+          caption={stats.latest ? `Último: ${formatDate(stats.latest.fecha)}` : 'Sin pagos registrados'}
+          tone="blue"
+        />
+        <Metric
+          icon={AlertTriangle}
+          label="Pagos anulados"
+          value={stats.anulados}
+          caption="Transacciones anuladas por auditoría"
+          tone={stats.anulados > 0 ? 'pink' : 'green'}
+        />
+      </section>
+
+      {error && (
+        <div className="api-notice" role="alert" style={{ marginBottom: 18 }}>
+          {error}
+          <button type="button" onClick={() => loadPayments(selectedMemberId)}>
+            Reintentar
+          </button>
+        </div>
+      )}
+
+      {/* Tabla de Historial de Pagos */}
+      <section className="panel plans-crud-panel">
+        <div className="panel-heading" style={{ marginBottom: 14 }}>
+          <div>
+            <p className="eyebrow">AUDITORÍA DE CAJA</p>
+            <h2>
+              {selectedMember
+                ? `Recibos de ${selectedMember.nombre}`
+                : 'Historial completo de pagos del club'}
+            </h2>
+          </div>
+          <div className="member-tools">
+            <label className="search-field">
+              <Search size={16} />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Buscar por plan, método, ref..."
+                aria-label="Buscar en pagos"
+              />
+            </label>
+            {query && (
+              <button className="button button-quiet" type="button" onClick={() => setQuery('')}>
+                Limpiar
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Filtros de estado de pagos */}
+        <div className="filter-toolbar" style={{ marginBottom: 14 }}>
+          <div className="filter-tabs" role="tablist" aria-label="Filtro de pagos">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={statusFilter === 'todos'}
+              className={`filter-tab ${statusFilter === 'todos' ? 'active' : ''}`}
+              onClick={() => setStatusFilter('todos')}
+            >
+              Todos <span className="filter-count">{payments.length}</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={statusFilter === 'pagados'}
+              className={`filter-tab ${statusFilter === 'pagados' ? 'active' : ''}`}
+              onClick={() => setStatusFilter('pagados')}
+            >
+              Válidos <span className="filter-count">{stats.count}</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={statusFilter === 'anulados'}
+              className={`filter-tab ${statusFilter === 'anulados' ? 'active' : ''}`}
+              onClick={() => setStatusFilter('anulados')}
+            >
+              Anulados <span className="filter-count">{stats.anulados}</span>
+            </button>
+          </div>
+        </div>
+
+        {loading ? (
+          <p style={{ textAlign: 'center', padding: '30px 0', color: '#778077', fontSize: 12 }}>
+            Cargando historial de pagos…
+          </p>
+        ) : (
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>FECHA</th>
+                  {!selectedMember && <th>MIEMBRO</th>}
+                  <th>PLAN / COBERTURA</th>
+                  <th>MÉTODO</th>
+                  <th>MONTO (COP)</th>
+                  <th>REFERENCIA</th>
+                  <th>REGISTRADO POR</th>
+                  <th>ESTADO</th>
+                  {isAdmin && <th style={{ textAlign: 'right', paddingRight: 14 }}>ACCIONES</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {filteredPayments.length ? (
+                  filteredPayments.map((payment) => (
+                    <tr key={payment.id} style={{ opacity: payment.anulado ? 0.65 : 1 }}>
+                      <td>
+                        <strong style={{ fontSize: 11, color: '#233226' }}>
+                          {formatDate(payment.fecha)}
+                        </strong>
+                        <small style={{ display: 'block', color: '#889186', fontSize: 10 }}>
+                          ID #{payment.id}
+                        </small>
+                      </td>
+                      {!selectedMember && (
+                        <td>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedMemberId(String(payment.member_id))}
+                            style={{
+                              border: 0,
+                              background: 'transparent',
+                              textAlign: 'left',
+                              cursor: 'pointer',
+                              padding: 0,
+                            }}
+                            title="Filtrar por este miembro"
+                          >
+                            <strong style={{ color: '#276948', fontSize: 11, display: 'block' }}>
+                              {payment.member_nombre}
+                            </strong>
+                            <small style={{ color: '#778077', fontSize: 10 }}>
+                              {payment.member_tipo_documento} {payment.member_numero_documento}
+                            </small>
+                          </button>
+                        </td>
+                      )}
+                      <td>
+                        <strong style={{ color: '#202a22', fontSize: 11 }}>
+                          {payment.plan_nombre}
+                        </strong>
+                        <small style={{ display: 'block', color: '#68776b', fontSize: 10 }}>
+                          {formatDate(payment.fecha_inicio)} al {formatDate(payment.fecha_fin)}
+                        </small>
+                      </td>
+                      <td>
+                        <span style={{ fontSize: 11, textTransform: 'capitalize', color: '#445247' }}>
+                          {payment.metodo_display || payment.metodo}
+                        </span>
+                      </td>
+                      <td>
+                        <strong style={{ color: payment.anulado ? '#889186' : '#29372d', fontSize: 12 }}>
+                          {formatCurrency(payment.monto_cop)}
+                        </strong>
+                      </td>
+                      <td>
+                        <span style={{ fontSize: 11, color: '#677268' }}>
+                          {payment.referencia || '—'}
+                        </span>
+                      </td>
+                      <td>
+                        <span style={{ fontSize: 11, color: '#677268' }}>
+                          {payment.registrado_por_nombre}
+                        </span>
+                      </td>
+                      <td>
+                        <span className={`status-badge ${payment.anulado ? 'voided' : 'paid'}`}>
+                          <i />
+                          {payment.anulado ? 'Anulado' : 'Pagado'}
+                        </span>
+                      </td>
+                      {isAdmin && (
+                        <td>
+                          <div className="member-actions">
+                            {!payment.anulado ? (
+                              <button
+                                className="action-btn action-delete"
+                                type="button"
+                                onClick={() => setSelectedPaymentForVoid(payment)}
+                                title="Anular pago por error o devolución"
+                              >
+                                Anular
+                              </button>
+                            ) : (
+                              <span style={{ fontSize: 10, color: '#b73824', fontStyle: 'italic' }}>
+                                Anulado
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={selectedMember ? (isAdmin ? 8 : 7) : (isAdmin ? 9 : 8)} className="empty-state">
+                      No se encontraron pagos con los filtros seleccionados.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      {/* Modal para anular pago */}
+      {selectedPaymentForVoid && (
+        <VoidPaymentConfirmDialog
+          payment={selectedPaymentForVoid}
+          onClose={() => setSelectedPaymentForVoid(null)}
+          onSuccess={(msg) => {
+            showToast(msg);
+            loadPayments(selectedMemberId);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [connectionError, setConnectionError] = useState('');
-  const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard' | 'plans'
+  const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard' | 'members' | 'history' | 'plans'
+  const [historyMemberId, setHistoryMemberId] = useState(null);
   const [period, setPeriod] = useState(6);
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('todos');
@@ -1316,6 +2233,7 @@ export default function App() {
   const { visibleMembers, counts } = useMemo(() => {
     let act = 0;
     let porVenc = 0;
+    let prox = 0;
     let venc = 0;
 
     const term = query.toLocaleLowerCase('es').trim();
@@ -1323,7 +2241,8 @@ export default function App() {
     members.forEach((m) => {
       if (m.estado === 'Activo') act++;
       else if (['Vence hoy', 'Vence mañana', 'Vence en 2 días', 'Vence en 3 días'].includes(m.estado)) porVenc++;
-      else venc++;
+      else if (m.estado === 'Próxima') prox++;
+      else if (m.estado === 'Vencido' || m.estado === 'Sin membresía') venc++;
     });
 
     const filtered = members.filter((member) => {
@@ -1338,6 +2257,7 @@ export default function App() {
       if (statusFilter === 'activos') return member.estado === 'Activo';
       if (statusFilter === 'por_vencer')
         return ['Vence hoy', 'Vence mañana', 'Vence en 2 días', 'Vence en 3 días'].includes(member.estado);
+      if (statusFilter === 'proximos') return member.estado === 'Próxima';
       if (statusFilter === 'vencidos') return member.estado === 'Vencido' || member.estado === 'Sin membresía';
       return true;
     });
@@ -1348,6 +2268,7 @@ export default function App() {
         todos: members.length,
         activos: act,
         por_vencer: porVenc,
+        proximos: prox,
         vencidos: venc,
       },
     };
@@ -1403,33 +2324,40 @@ export default function App() {
 
           <button
             type="button"
-            className="nav-link"
-            onClick={() => {
-              setActiveTab('dashboard');
-              setTimeout(() => {
-                document.getElementById('miembros')?.scrollIntoView({ behavior: 'smooth' });
-              }, 50);
+            className={`nav-link ${activeTab === 'members' ? 'selected' : ''}`}
+            onClick={() => setActiveTab('members')}
+            style={{
+              width: '100%',
+              background: activeTab === 'members' ? '#ffffff16' : 'transparent',
+              border: 0,
+              cursor: 'pointer',
+              textAlign: 'left',
             }}
-            style={{ width: '100%', background: 'transparent', border: 0, cursor: 'pointer', textAlign: 'left' }}
           >
             <Users size={18} />
             <span>Miembros</span>
             <small className="nav-count">{metrics?.miembros ?? '—'}</small>
+            {activeTab === 'members' && <i className="nav-indicator" />}
           </button>
 
           <button
             type="button"
-            className="nav-link"
+            className={`nav-link ${activeTab === 'history' ? 'selected' : ''}`}
             onClick={() => {
-              setActiveTab('dashboard');
-              setTimeout(() => {
-                document.getElementById('ingresos')?.scrollIntoView({ behavior: 'smooth' });
-              }, 50);
+              setHistoryMemberId(null);
+              setActiveTab('history');
             }}
-            style={{ width: '100%', background: 'transparent', border: 0, cursor: 'pointer', textAlign: 'left' }}
+            style={{
+              width: '100%',
+              background: activeTab === 'history' ? '#ffffff16' : 'transparent',
+              border: 0,
+              cursor: 'pointer',
+              textAlign: 'left',
+            }}
           >
-            <CreditCard size={18} />
-            <span>Ingresos</span>
+            <Receipt size={18} />
+            <span>Historial de Pagos</span>
+            {activeTab === 'history' && <i className="nav-indicator" />}
           </button>
 
           {isAdmin && (
@@ -1454,24 +2382,28 @@ export default function App() {
 
         <div className="sidebar-bottom">
           <div className="sidebar-label">CLUB</div>
-          <a className="nav-link" href="/admin/" target="_blank" rel="noreferrer">
-            <Settings2 size={18} />
-            <span>Django Admin</span>
-          </a>
           <a className="nav-link" href="mailto:soporte@passionfitness.co">
             <CircleHelp size={18} />
-            <span>Centro de ayuda</span>
+            <span>Soporte</span>
           </a>
-          <button className="club-card" type="button" onClick={handleLogout}>
-            <span className="club-avatar">{user.username.slice(0, 2).toUpperCase()}</span>
-            <span className="club-info">
-              <strong>{user.username}</strong>
-              <small>
-                {isAdmin ? 'Administrador' : 'Staff'} · Cerrar sesión
-              </small>
-            </span>
-            <LogOut size={15} />
-          </button>
+          <div className="user-profile-widget">
+            <div className="user-profile-details">
+              <span className="user-profile-avatar">{user.username.slice(0, 2).toUpperCase()}</span>
+              <div className="user-profile-info">
+                <strong>{user.username}</strong>
+                <small>{isAdmin ? 'Administrador' : 'Staff'}</small>
+              </div>
+            </div>
+            <button
+              className="logout-button"
+              type="button"
+              onClick={handleLogout}
+              title="Cerrar sesión"
+              aria-label="Cerrar sesión"
+            >
+              <LogOut size={16} />
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -1481,7 +2413,15 @@ export default function App() {
           <div className="breadcrumb">
             <span>Passion Fitness</span>
             <i>/</i>
-            <strong>{activeTab === 'plans' ? 'Planes de Membresía' : 'Resumen'}</strong>
+            <strong>
+              {activeTab === 'plans'
+                ? 'Planes de Membresía'
+                : activeTab === 'members'
+                ? 'Gestión de Miembros'
+                : activeTab === 'history'
+                ? 'Historial de Pagos'
+                : 'Resumen'}
+            </strong>
           </div>
           <div className="topbar-actions">
             <span className={`role-pill ${isAdmin ? 'admin' : 'staff'}`}>
@@ -1501,6 +2441,28 @@ export default function App() {
             onBackToDashboard={() => setActiveTab('dashboard')}
             showToast={showToast}
             onPlanListChanged={(updatedPlans) => setPlans(updatedPlans.filter((p) => p.activo))}
+          />
+        ) : activeTab === 'members' ? (
+          <MembersManagementView
+            members={members}
+            plans={plans}
+            isAdmin={isAdmin}
+            onBackToDashboard={() => setActiveTab('dashboard')}
+            onNavigateToHistory={(memberId) => {
+              setHistoryMemberId(memberId);
+              setActiveTab('history');
+            }}
+            showToast={showToast}
+            onRefreshData={() => setRefreshKey((c) => c + 1)}
+          />
+        ) : activeTab === 'history' ? (
+          <PaymentHistoryView
+            members={members}
+            initialMemberId={historyMemberId}
+            isAdmin={isAdmin}
+            onBackToDashboard={() => setActiveTab('dashboard')}
+            onOpenRenew={(member) => setSelectedMemberForRenewal(member)}
+            showToast={showToast}
           />
         ) : (
           <div className="page-wrap">
@@ -1563,7 +2525,7 @@ export default function App() {
                 icon={Activity}
                 label="Miembros activos"
                 value={metrics?.activos ?? '—'}
-                caption={`${metrics?.vencidos ?? '—'} sin membresía vigente`}
+                caption={`${metrics?.vencidos ?? 0} vencidos${(metrics?.proximos || 0) > 0 ? ` · ${metrics.proximos} próximas` : ''}`}
                 tone="pink"
               />
             </section>
@@ -1646,6 +2608,14 @@ export default function App() {
                       Limpiar
                     </button>
                   )}
+                  <button
+                    className="button button-quiet"
+                    type="button"
+                    onClick={() => setActiveTab('members')}
+                    style={{ whiteSpace: 'nowrap' }}
+                  >
+                    Ver gestión completa <ArrowUpRight size={14} />
+                  </button>
                 </div>
               </div>
 
@@ -1678,6 +2648,15 @@ export default function App() {
                     onClick={() => setStatusFilter('por_vencer')}
                   >
                     Por vencer (≤3d) <span className="filter-count">{counts.por_vencer}</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={statusFilter === 'proximos'}
+                    className={`filter-tab ${statusFilter === 'proximos' ? 'active' : ''}`}
+                    onClick={() => setStatusFilter('proximos')}
+                  >
+                    Próximas <span className="filter-count">{counts.proximos}</span>
                   </button>
                   <button
                     type="button"
@@ -1733,6 +2712,17 @@ export default function App() {
                                 title="Renovar membresía o cobrar"
                               >
                                 <CreditCard size={12} /> Renovar / Cobrar
+                              </button>
+                              <button
+                                className="action-btn"
+                                type="button"
+                                onClick={() => {
+                                  setHistoryMemberId(member.id);
+                                  setActiveTab('history');
+                                }}
+                                title="Ver historial de pagos del miembro"
+                              >
+                                <Receipt size={12} /> Historial
                               </button>
                               {isAdmin && (
                                 <>
