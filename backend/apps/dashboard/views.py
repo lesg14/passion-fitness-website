@@ -11,12 +11,21 @@ from apps.members.models import Member
 def calcular_estadisticas(hoy=None):
     hoy = hoy or timezone.localdate()
     limite = hoy + timedelta(days=3)
-    vigentes = Membership.objects.filter(fecha_inicio__lte=hoy, fecha_fin__gte=hoy)
-    total = Member.objects.count()
+    miembros_activos = Member.objects.filter(archivado=False)
+    vigentes = Membership.objects.filter(
+        member__archivado=False,
+        fecha_inicio__lte=hoy,
+        fecha_fin__gte=hoy,
+    )
+    total = miembros_activos.count()
     activos = vigentes.values("member").distinct().count()
     # Activos cuya membresía más larga termina en los próximos 3 días (hoy, mañana, en 2 días o en 3 días)
     por_vencer = (
-        Membership.objects.filter(member__in=vigentes.values("member"), fecha_fin__gte=hoy)
+        Membership.objects.filter(
+            member__archivado=False,
+            member__in=vigentes.values("member"),
+            fecha_fin__gte=hoy,
+        )
         .values("member")
         .annotate(fin=Max("fecha_fin"))
         .filter(fin__lte=limite)
@@ -24,7 +33,7 @@ def calcular_estadisticas(hoy=None):
     )
     # Miembros con membresía futura (próxima a iniciar) que no tienen membresía activa hoy
     proximos = (
-        Membership.objects.filter(fecha_inicio__gt=hoy)
+        Membership.objects.filter(member__archivado=False, fecha_inicio__gt=hoy)
         .exclude(member__in=vigentes.values("member"))
         .values("member")
         .distinct()

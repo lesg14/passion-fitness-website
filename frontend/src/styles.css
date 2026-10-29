@@ -251,7 +251,9 @@ button { color: inherit; }
 }
 
 .status-upcoming { color: #1f6482; background: #e6f4fa; }
+.status-archived { color: #666d65; background: #eceeeb; }
 .member-avatar.blue { color: #1e5a75; background: #dff0f8; }
+.member-avatar.gray { color: #5e655e; background: #e6e9e5; }
 
 .status-badge.paid {
   background: #e8f5ed;

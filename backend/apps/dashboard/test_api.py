@@ -152,6 +152,43 @@ class DashboardApiTests(TestCase):
         self.assertEqual(filtered_resp.status_code, 200)
         self.assertEqual(len(filtered_resp.json()), 1)
 
+    def test_archiving_member_preserves_financial_history_and_can_be_reversed(self):
+        payment = registrar_pago(self.member, self.plan, 'efectivo')
+        self.client.force_login(self.staff)
+        denied = self.client.delete(f'/api/members/{self.member.id}/')
+        self.assertEqual(denied.status_code, 403)
+
+        self.client.force_login(self.admin)
+        response = self.client.delete(f'/api/members/{self.member.id}/')
+        self.assertEqual(response.status_code, 204)
+        self.member.refresh_from_db()
+        self.assertTrue(self.member.archivado)
+        self.assertTrue(Payment.objects.filter(pk=payment.pk).exists())
+        self.assertTrue(Membership.objects.filter(pk=payment.membership_id).exists())
+        self.assertEqual(self.client.get('/api/members/').json(), [])
+        archived = self.client.get('/api/members/?include_archived=true').json()
+        self.assertEqual(len(archived), 1)
+        self.assertEqual(archived[0]['estado'], 'Archivado')
+
+        restored = self.client.patch(
+            f'/api/members/{self.member.id}/',
+            data=json.dumps({'archivado': False}),
+            content_type='application/json',
+        )
+        self.assertEqual(restored.status_code, 200)
+        self.member.refresh_from_db()
+        self.assertFalse(self.member.archivado)
+
+    def test_archived_members_do_not_affect_dashboard_counts(self):
+        registrar_pago(self.member, self.plan, 'efectivo')
+        self.member.archivado = True
+        self.member.save(update_fields=['archivado'])
+        self.client.force_login(self.staff)
+        metrics = self.client.get('/api/dashboard/').json()['metrics']
+        self.assertEqual(metrics['miembros'], 0)
+        self.assertEqual(metrics['activos'], 0)
+        self.assertEqual(metrics['vencidos'], 0)
+
     def test_login_requires_csrf_and_only_accepts_staff_or_admin(self):
         client = Client(enforce_csrf_checks=True)
         response = client.post(
@@ -302,7 +339,9 @@ class DashboardApiTests(TestCase):
         self.client.force_login(self.admin)
         resp = self.client.delete(f'/api/members/{self.member.id}/', HTTP_X_CSRFTOKEN=token)
         self.assertEqual(resp.status_code, 204)
-        self.assertFalse(Member.objects.filter(id=self.member.id).exists())
+        self.member.refresh_from_db()
+        self.assertTrue(self.member.archivado)
+        self.assertTrue(Member.objects.filter(id=self.member.id).exists())
 
     def test_admin_can_void_payment(self):
         token = self.csrf_token()

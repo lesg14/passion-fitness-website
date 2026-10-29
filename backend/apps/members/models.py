@@ -18,6 +18,7 @@ class Member(models.Model):
     email = models.EmailField(blank=True)
     fecha_nacimiento = models.DateField(null=True, blank=True)
     fecha_registro = models.DateField(default=timezone.localdate)
+    archivado = models.BooleanField(default=False, db_index=True)
     # Habeas Data (Ley 1581 de 2012)
     acepta_datos_en = models.DateTimeField("autorización de datos", null=True, blank=True)
     # Se enlaza cuando se habilite el portal del cliente

@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import {
   Activity,
   AlertTriangle,
+  Archive,
   ArrowLeft,
   ArrowUpRight,
   CalendarDays,
@@ -76,6 +77,7 @@ function renderStatusPill(estado) {
   let tone = 'status-inactive';
   if (estado === 'Activo') tone = 'status-active';
   else if (estado === 'Próxima') tone = 'status-upcoming';
+  else if (estado === 'Archivado') tone = 'status-archived';
   else if (estado === 'Vence hoy') tone = 'status-urgent';
   else if (['Vence mañana', 'Vence en 2 días', 'Vence en 3 días'].includes(estado)) tone = 'status-due';
   return (
@@ -89,6 +91,7 @@ function renderStatusPill(estado) {
 function getAvatarTone(estado) {
   if (estado === 'Activo') return 'mint';
   if (estado === 'Próxima') return 'blue';
+  if (estado === 'Archivado') return 'gray';
   if (estado === 'Vence hoy') return 'coral';
   if (['Vence mañana', 'Vence en 2 días', 'Vence en 3 días'].includes(estado)) return 'coral';
   return 'lilac';
@@ -676,7 +679,7 @@ function DeleteMemberConfirmDialog({ member, onClose, onSuccess }) {
     setError('');
     try {
       await apiRequest(`/members/${member.id}/`, { method: 'DELETE' });
-      onSuccess(`Miembro ${member.nombre} eliminado.`);
+      onSuccess(`Miembro ${member.nombre} archivado. Su historial se conservó.`);
       onClose();
     } catch (requestError) {
       setError(requestError.message);
@@ -692,7 +695,7 @@ function DeleteMemberConfirmDialog({ member, onClose, onSuccess }) {
             <span className="eyebrow" style={{ color: '#b73824' }}>
               ZONA DE PELIGRO
             </span>
-            <h2 id="delete-title">Eliminar miembro</h2>
+            <h2 id="delete-title">Archivar miembro</h2>
           </div>
           <button className="icon-button" type="button" onClick={onClose} aria-label="Cerrar">
             <X size={19} />
@@ -702,8 +705,8 @@ function DeleteMemberConfirmDialog({ member, onClose, onSuccess }) {
         <div className="dialog-info-banner warning" style={{ marginBottom: 18 }}>
           <AlertTriangle size={20} style={{ flexShrink: 0, marginTop: 2 }} />
           <div>
-            <strong>¿Confirmas eliminar a {member.nombre}?</strong>
-            <span>Esta acción es irreversible y eliminará su historial de membresías y pagos asociados.</span>
+            <strong>¿Confirmas archivar a {member.nombre}?</strong>
+            <span>Se ocultará del directorio operativo. Sus pagos y membresías se conservarán y un administrador podrá restaurarlo.</span>
           </div>
         </div>
 
@@ -724,7 +727,7 @@ function DeleteMemberConfirmDialog({ member, onClose, onSuccess }) {
             onClick={confirmDelete}
             disabled={busy}
           >
-            {busy ? 'Eliminando…' : 'Sí, eliminar miembro'}
+            {busy ? 'Archivando…' : 'Sí, archivar miembro'}
           </button>
         </div>
       </section>
@@ -924,16 +927,19 @@ function MembersManagementView({
   const [selectedMemberForRenewal, setSelectedMemberForRenewal] = useState(null);
   const [selectedMemberForEdit, setSelectedMemberForEdit] = useState(null);
   const [selectedMemberForDelete, setSelectedMemberForDelete] = useState(null);
+  const [actionError, setActionError] = useState('');
 
   const { filteredMembers, counts } = useMemo(() => {
     let act = 0;
     let porVenc = 0;
     let prox = 0;
     let venc = 0;
+    let archivados = 0;
     const term = query.toLocaleLowerCase('es').trim();
 
     members.forEach((m) => {
-      if (m.estado === 'Activo') act++;
+      if (m.archivado) archivados++;
+      else if (m.estado === 'Activo') act++;
       else if (['Vence hoy', 'Vence mañana', 'Vence en 2 días', 'Vence en 3 días'].includes(m.estado)) porVenc++;
       else if (m.estado === 'Próxima') prox++;
       else if (m.estado === 'Vencido' || m.estado === 'Sin membresía') venc++;
@@ -948,6 +954,8 @@ function MembersManagementView({
 
       if (!matchText) return false;
 
+      if (statusFilter === 'archivados') return member.archivado;
+      if (member.archivado) return statusFilter === 'todos';
       if (statusFilter === 'activos') return member.estado === 'Activo';
       if (statusFilter === 'por_vencer')
         return ['Vence hoy', 'Vence mañana', 'Vence en 2 días', 'Vence en 3 días'].includes(member.estado);
@@ -964,6 +972,7 @@ function MembersManagementView({
         por_vencer: porVenc,
         proximos: prox,
         vencidos: venc,
+        archivados,
       },
     };
   }, [members, query, statusFilter]);
@@ -973,6 +982,17 @@ function MembersManagementView({
     setShowAddMemberDialog(false);
     showToast(`¡Miembro ${member.nombre} registrado con éxito!`);
     onRefreshData();
+  }
+
+  async function restoreMember(member) {
+    setActionError('');
+    try {
+      await apiRequest(`/members/${member.id}/`, { method: 'PATCH', body: { archivado: false } });
+      showToast(`Miembro ${member.nombre} restaurado.`);
+      onRefreshData();
+    } catch (error) {
+      setActionError(error.message);
+    }
   }
 
   return (
@@ -1033,12 +1053,23 @@ function MembersManagementView({
         />
         <Metric
           icon={AlertTriangle}
-          label="Vencidos / Inactivos"
+          label="Vencidos"
           value={counts.vencidos}
-          caption="Sin membresía vigente"
+          caption="Membresías finalizadas"
           tone="pink"
         />
+        {isAdmin && (
+          <Metric
+            icon={Archive}
+            label="Archivados"
+            value={counts.archivados}
+            caption="Historial conservado"
+            tone="blue"
+          />
+        )}
       </section>
+
+      {actionError && <div className="api-notice" role="alert">{actionError}</div>}
 
       {/* Tabla CRUD de Miembros */}
       <section className="panel members-panel" style={{ padding: '22px 24px' }}>
@@ -1113,6 +1144,17 @@ function MembersManagementView({
             >
               Vencidos <span className="filter-count">{counts.vencidos}</span>
             </button>
+            {isAdmin && (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={statusFilter === 'archivados'}
+                className={`filter-tab ${statusFilter === 'archivados' ? 'active' : ''}`}
+                onClick={() => setStatusFilter('archivados')}
+              >
+                Archivados <span className="filter-count">{counts.archivados}</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -1166,6 +1208,7 @@ function MembersManagementView({
                           type="button"
                           onClick={() => setSelectedMemberForRenewal(member)}
                           title="Renovar membresía o cobrar"
+                          disabled={member.archivado || member.estado === 'Archivado'}
                         >
                           <CreditCard size={12} /> Renovar / Cobrar
                         </button>
@@ -1185,14 +1228,24 @@ function MembersManagementView({
                         >
                           <Edit2 size={12} /> Editar
                         </button>
-                        {isAdmin && (
+                        {isAdmin && !member.archivado && (
                           <button
                             className="action-btn action-delete"
                             type="button"
                             onClick={() => setSelectedMemberForDelete(member)}
-                            title="Eliminar miembro"
+                            title="Archivar miembro y conservar historial"
                           >
-                            <Trash2 size={12} />
+                            <Archive size={12} />
+                          </button>
+                        )}
+                        {isAdmin && member.archivado && (
+                          <button
+                            className="action-btn"
+                            type="button"
+                            onClick={() => restoreMember(member)}
+                            title="Restaurar miembro"
+                          >
+                            Reactivar
                           </button>
                         )}
                       </div>
@@ -2187,7 +2240,7 @@ export default function App() {
       try {
         const [summary, memberList, activePlans] = await Promise.all([
           apiRequest(`/dashboard/?months=${period}`),
-          apiRequest('/members/'),
+          apiRequest(user.is_superuser ? '/members/?include_archived=true' : '/members/'),
           apiRequest('/plans/'),
         ]);
         if (active) {
@@ -2235,11 +2288,13 @@ export default function App() {
     let porVenc = 0;
     let prox = 0;
     let venc = 0;
+    let archivados = 0;
 
     const term = query.toLocaleLowerCase('es').trim();
 
     members.forEach((m) => {
-      if (m.estado === 'Activo') act++;
+      if (m.archivado) archivados++;
+      else if (m.estado === 'Activo') act++;
       else if (['Vence hoy', 'Vence mañana', 'Vence en 2 días', 'Vence en 3 días'].includes(m.estado)) porVenc++;
       else if (m.estado === 'Próxima') prox++;
       else if (m.estado === 'Vencido' || m.estado === 'Sin membresía') venc++;
@@ -2253,6 +2308,7 @@ export default function App() {
           .includes(term);
 
       if (!matchText) return false;
+      if (member.archivado) return false;
 
       if (statusFilter === 'activos') return member.estado === 'Activo';
       if (statusFilter === 'por_vencer')
@@ -2265,11 +2321,12 @@ export default function App() {
     return {
       visibleMembers: filtered,
       counts: {
-        todos: members.length,
+        todos: members.filter((member) => !member.archivado).length,
         activos: act,
         por_vencer: porVenc,
         proximos: prox,
         vencidos: venc,
+        archivados,
       },
     };
   }, [members, query, statusFilter]);
@@ -2724,7 +2781,7 @@ export default function App() {
                               >
                                 <Receipt size={12} /> Historial
                               </button>
-                              {isAdmin && (
+                              {isAdmin && !member.archivado && (
                                 <>
                                   <button
                                     className="action-btn"
@@ -2738,9 +2795,9 @@ export default function App() {
                                     className="action-btn action-delete"
                                     type="button"
                                     onClick={() => setSelectedMemberForDelete(member)}
-                                    title="Eliminar miembro"
+                                    title="Archivar miembro y conservar historial"
                                   >
-                                    <Trash2 size={12} />
+                                    <Archive size={12} />
                                   </button>
                                 </>
                               )}

@@ -192,6 +192,7 @@ class MemberSerializer(serializers.ModelSerializer):
             'fecha_inicio',
             'estado',
             'iniciales',
+            'archivado',
         )
 
     def to_representation(self, instance):
@@ -235,6 +236,8 @@ class MemberSerializer(serializers.ModelSerializer):
         return membership.fecha_fin.isoformat() if membership else None
 
     def get_estado(self, obj):
+        if obj.archivado:
+            return 'Archivado'
         today = timezone.localdate()
         memberships = self._memberships(obj)
         if not memberships:
@@ -306,7 +309,7 @@ class MemberRegistrationSerializer(serializers.Serializer):
 class MemberUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Member
-        fields = ('id', 'nombres', 'apellidos', 'tipo_documento', 'numero_documento', 'telefono', 'email')
+        fields = ('id', 'nombres', 'apellidos', 'tipo_documento', 'numero_documento', 'telefono', 'email', 'archivado')
 
     def validate(self, attrs):
         tipo = attrs.get('tipo_documento', self.instance.tipo_documento if self.instance else None)
@@ -328,6 +331,12 @@ class MemberListCreateView(generics.ListCreateAPIView):
         queryset = Member.objects.prefetch_related(
             Prefetch('memberships', queryset=memberships, to_attr='api_memberships')
         ).order_by('apellidos', 'nombres')
+        include_archived = (
+            self.request.user.is_superuser
+            and self.request.query_params.get('include_archived') == 'true'
+        )
+        if not include_archived:
+            queryset = queryset.filter(archivado=False)
         search = self.request.query_params.get('search', '').strip()
         if search:
             queryset = queryset.filter(
@@ -353,21 +362,27 @@ class MemberListCreateView(generics.ListCreateAPIView):
 class MemberDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Member.objects.all()
 
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        if not self.request.user.is_superuser:
+            queryset = queryset.filter(archivado=False)
+        return queryset
+
     def get_serializer_class(self):
         if self.request.method in ['PUT', 'PATCH']:
             return MemberUpdateSerializer
         return MemberSerializer
 
     def get_permissions(self):
-        if self.request.method == 'DELETE':
+        if self.request.method == 'DELETE' or (
+            self.request.method in ('PUT', 'PATCH') and 'archivado' in self.request.data
+        ):
             return [IsAdminRole()]
         return super().get_permissions()
 
     def perform_destroy(self, instance):
-        with transaction.atomic():
-            instance.payments.all().delete()
-            instance.memberships.all().delete()
-            instance.delete()
+        instance.archivado = True
+        instance.save(update_fields=['archivado'])
 
 
 class PaymentCreateSerializer(serializers.Serializer):
