@@ -1,23 +1,23 @@
-# ADR-0004: SQLite como base de datos configurada
+# ADR-0004: SQLite para desarrollo local
 
-- Estado: Aceptada para la configuración actual (documentada retrospectivamente)
+- Estado: Aceptada para desarrollo; PostgreSQL se usa en despliegues operativos (ver [ADR-0010](0010-postgresql-operacion.md))
 - Fecha de documentación: 2026-10-11
 - Decidida originalmente: No consta
 
 ## Contexto
 
-La configuración de Django usa `django.db.backends.sqlite3` y guarda la base de datos en `backend/db.sqlite3`. El repositorio incluye ese archivo y no configura otro motor.
+La configuración local de Django usa `django.db.backends.sqlite3` y guarda la base de datos en `backend/db.sqlite3`. El proyecto permite seleccionar PostgreSQL mediante variables de entorno.
 
 ## Decisión
 
-Usar SQLite como base de datos de la aplicación en la configuración actual.
+Usar SQLite por defecto para desarrollo y pruebas locales; usar PostgreSQL para el entorno del gimnasio y producción.
 
 ## Motivos
 
-La configuración existente y los comandos de desarrollo respaldan esta elección. No consta si se consideró apropiada para producción ni el motivo original.
+SQLite facilita el desarrollo sin un servicio adicional. PostgreSQL ofrece una base compartida y administrable para el uso operativo. La configuración de ambas depende del entorno y no requiere cambiar los modelos.
 
 ## Consecuencias
 
-- El entorno puede usar la base de datos integrada de Django sin un servidor de base de datos adicional.
-- La configuración, copia de seguridad, concurrencia y operación en producción deben reevaluarse conforme a la carga y al despliegue reales.
-- Migrar a otro motor requerirá configurar credenciales y conexión, y validar migraciones y datos.
+- El entorno local puede usar la base integrada sin instalar PostgreSQL.
+- El entorno PostgreSQL requiere el driver Psycopg y credenciales fuera del repositorio.
+- Las migraciones Django crean el esquema; no transfieren registros ni importan el Excel. Toda carga debe reconciliarse antes del cambio operativo.

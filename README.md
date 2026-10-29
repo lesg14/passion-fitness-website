@@ -28,7 +28,7 @@ React consume la API REST de Django mediante sesiones autenticadas. El acceso al
 
 El sistema diferencia dos perfiles de acceso:
 - **Staff / Recepción (`is_staff`)**: Registrar nuevos miembros, renovar membresías/pagos, consultar el dashboard y estadísticas, buscar y filtrar miembros.
-- **Administrador (`is_superuser`)**: Control total del sistema. Además de las funciones de recepción, puede crear y editar planes (precios y vigencias), pausar/desactivar planes, editar información de miembros, eliminar miembros y anular pagos erróneos.
+- **Administrador (`is_superuser`)**: Control total del sistema. Además de las funciones de recepción, puede crear y editar planes (precios y vigencias), pausar/desactivar planes, editar información de miembros, archivar/restaurar miembros y anular pagos erróneos.
 
 ## Decisiones de arquitectura
 
@@ -60,6 +60,31 @@ npm run dev
 
 Mantén ambas terminales abiertas. En la pantalla de login de React puedes elegir la pestaña **Staff / Recepción** o **Administrador** según el perfil del usuario.
 
+## PostgreSQL
+
+El desarrollo local usa SQLite por defecto. Para preparar PostgreSQL 18 local:
+
+1. Crea una base y un rol desde `psql` o pgAdmin. En `psql`, conectado como administrador de PostgreSQL:
+
+```sql
+CREATE ROLE passion_fitness LOGIN;
+\password passion_fitness
+CREATE DATABASE passion_fitness OWNER passion_fitness ENCODING 'UTF8';
+```
+
+2. Desde la raíz del proyecto, copia `.env.example` a `.env` y configura `DB_ENGINE=postgresql`, `DB_NAME`, `DB_USER` y `DB_PASSWORD`. Mantén `.env` fuera de Git. Genera una clave con `py -c "import secrets; print(secrets.token_urlsafe(64))"`. Para producción, configura `DJANGO_SECRET_KEY`, `DJANGO_DEBUG=False`, los dominios reales en `DJANGO_ALLOWED_HOSTS` y orígenes HTTPS en `DJANGO_CSRF_TRUSTED_ORIGINS`.
+3. Aplica el esquema y verifica la conexión:
+
+```powershell
+Push-Location backend
+..\.venv\Scripts\python manage.py migrate
+..\.venv\Scripts\python manage.py check --database default
+```
+
+`migrate` crea las tablas, pero no copia los datos de SQLite ni importa el Excel. No cambies la base de uso diario hasta tener respaldos y reconciliar los registros importados. En producción, configura HTTPS, cookies seguras, `DB_SSLMODE=verify-full` y `DB_SSLROOTCERT` con el certificado raíz de PostgreSQL.
+
+La importación histórica desde Excel aún está pendiente. El archivo debe revisarse primero para definir la relación entre miembros, planes, pagos y periodos, resolver documentos duplicados y cuadrar los totales antes de cargar datos reales.
+
 ## API
 
 Todos los endpoints requieren sesión autenticada (`is_staff`). Las operaciones marcadas con `(Admin)` requieren permisos de superusuario (`is_superuser`). React gestiona automáticamente el token CSRF.
@@ -75,12 +100,15 @@ Todos los endpoints requieren sesión autenticada (`is_staff`). Las operaciones 
 | `POST` | `/api/plans/` | Admin | Crear un nuevo plan de membresía |
 | `PATCH` | `/api/plans/<id>/` | Admin | Editar nombre, precio o pausar/activar un plan |
 | `DELETE` | `/api/plans/<id>/` | Admin | Eliminar o desactivar lógicamente un plan |
-| `GET` | `/api/members/?search=ana` | Staff/Admin | Buscar y listar miembros con estado calculado |
+| `GET` | `/api/members/?search=ana` | Staff/Admin | Buscar y listar miembros activos con estado calculado |
+| `GET` | `/api/members/?include_archived=true` | Admin | Incluir miembros archivados en el directorio |
 | `POST` | `/api/members/` | Staff/Admin | Registrar miembro, consentimiento, pago y primera membresía |
 | `PATCH` | `/api/members/<id>/` | Staff/Admin | Actualizar datos del miembro (contacto, nombres, documento) |
-| `DELETE` | `/api/members/<id>/` | Admin | Eliminar miembro con pagos y membresías asociadas |
+| `DELETE` | `/api/members/<id>/` | Admin | Archivar miembro, conservando pagos y membresías |
+| `PATCH` | `/api/members/<id>/` | Admin | Archivar (`archivado: true`) o restaurar (`archivado: false`) un miembro |
+| `GET` | `/api/payments/?member_id=<id>` | Staff/Admin | Consultar historial de pagos; `search` acepta nombre, documento, plan o referencia |
 | `POST` | `/api/payments/` | Staff/Admin | Registrar pago y renovar membresía a un miembro existente |
-| `POST` | `/api/payments/<id>/void/` | Admin | Anular un pago (marca membresía asociada como inactiva) |
+| `POST` | `/api/payments/<id>/void/` | Admin | Marcar el pago como anulado y excluirlo de ingresos; no cambia las fechas de membresía |
 
 ### Estados calculados de membresía
 
@@ -93,6 +121,9 @@ El sistema evalúa dinámicamente la vigencia en la zona horaria colombiana (`Am
 - **Próxima**: Membresía con fecha de inicio en el futuro.
 - **Vencido**: La fecha de fin es anterior a hoy.
 - **Sin membresía**: Miembro sin historial de membresías activas.
+- **Archivado**: Miembro retirado del directorio operativo; el historial financiero permanece disponible.
+
+Los miembros archivados no aparecen en los flujos operativos ni en las métricas. El administrador puede incluirlos en el directorio con `include_archived=true` y restaurarlos.
 
 ## Pruebas
 

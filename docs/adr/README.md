@@ -16,3 +16,4 @@ Registro de decisiones arquitectónicas de Passion Fitness. Los ADR describen la
 
 - [ADR-0008: React/Vite como frontend del dashboard](0008-papel-de-react-vite.md)
 - [ADR-0009: API REST autenticada por sesión](0009-api-rest-sesion.md)
+- [ADR-0010: PostgreSQL para operación](0010-postgresql-operacion.md)
