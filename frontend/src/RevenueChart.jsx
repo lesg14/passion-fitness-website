@@ -1,4 +1,4 @@
-import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
 const formatCurrency = (value) => new Intl.NumberFormat('es-CO', {
   style: 'currency', currency: 'COP', maximumFractionDigits: 0,
@@ -6,13 +6,12 @@ const formatCurrency = (value) => new Intl.NumberFormat('es-CO', {
 
 export default function RevenueChart({ data }) {
   return <ResponsiveContainer width="100%" height="100%">
-    <AreaChart data={data} margin={{ top: 12, right: 8, left: 0, bottom: 0 }}>
-      <defs><linearGradient id="revenueFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#77b89a" stopOpacity={0.25} /><stop offset="95%" stopColor="#77b89a" stopOpacity={0.015} /></linearGradient></defs>
-      <CartesianGrid vertical={false} stroke="#e9ece7" strokeDasharray="3 5" />
-      <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#929a91', fontSize: 12 }} dy={12} />
-      <YAxis axisLine={false} tickLine={false} tick={{ fill: '#929a91', fontSize: 11 }} tickFormatter={(value) => `$${value / 1000000}M`} width={48} />
-      <Tooltip formatter={(value) => [formatCurrency(value), 'Ingresos']} contentStyle={{ border: '1px solid #e7eae4', borderRadius: 8, fontFamily: 'DM Sans' }} />
-      <Area type="monotone" dataKey="revenue" stroke="#43866a" strokeWidth={2.5} fill="url(#revenueFill)" activeDot={{ r: 5, fill: '#43866a', stroke: '#fff', strokeWidth: 2 }} />
-    </AreaChart>
+    <BarChart data={data} margin={{ top: 12, right: 8, left: 0, bottom: 0 }}>
+      <CartesianGrid vertical={false} stroke="#2e2e2e" strokeDasharray="3 5" />
+      <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#8a8a85', fontSize: 12 }} dy={12} />
+      <YAxis axisLine={false} tickLine={false} tick={{ fill: '#8a8a85', fontSize: 11 }} tickFormatter={(value) => `$${value / 1000000}M`} width={48} />
+      <Tooltip cursor={{ fill: '#ffffff0d' }} formatter={(value) => [formatCurrency(value), 'Ingresos']} contentStyle={{ background: '#222', border: '1px solid #333', borderRadius: 8, color: '#fff', fontFamily: 'DM Sans' }} itemStyle={{ color: '#fff' }} labelStyle={{ color: '#ffce2b' }} />
+      <Bar dataKey="revenue" fill="#ffce2b" radius={[6, 6, 0, 0]} maxBarSize={44} />
+    </BarChart>
   </ResponsiveContainer>;
 }

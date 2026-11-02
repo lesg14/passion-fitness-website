@@ -333,3 +333,76 @@ button { color: inherit; }
   color: #5d6e61;
   margin-top: 2px;
 }
+
+/* Tema Passion Fitness: negro y amarillo del logo (sobrescribe la paleta verde anterior) */
+:root { --ink: #151515; --muted: #8a8a85; --line: #e8e8e4; --brand: #ffce2b; --brand-soft: #fff1c2; --brand-ink: #8a6a00; --panel-dark: #1a1a1a; --sidebar: #141414; color: #151515; background: #f5f5f2; }
+.sidebar { color: #e8e8e4; }
+.brand { justify-content: center; padding: 0 0 22px; }
+.brand-logo { display: block; width: 176px; height: auto; margin: -6px auto 0; }
+.brand-wordmark { color: var(--brand); font: 800 15px 'Manrope', sans-serif; letter-spacing: 1.5px; }
+.sidebar-label { color: #6f6f6a; }
+.nav-indicator { display: none; }
+.nav-link { width: 100%; border: 0; background: transparent; color: #b5b5b0; text-align: left; cursor: pointer; }
+.nav-link:hover { color: #fff; background: #ffffff10; }
+.nav-link.selected { color: #151515; background: var(--brand); font-weight: 600; }
+.nav-link.selected > svg, .nav-link.selected .nav-count { color: #151515; }
+.nav-count { color: #8a8a85; }
+.user-profile-widget { background: #1e1e1e; border-color: #2c2c2c; }
+.user-profile-avatar { color: #151515; background: var(--brand); }
+.user-profile-info small { color: #8a8a85; }
+
+.topbar { background: #fff; border-bottom-color: #ececE8; }
+.breadcrumb strong { color: #151515; }
+.user-avatar { color: var(--brand); background: #151515; }
+.role-pill.admin { color: var(--brand-ink); background: var(--brand-soft); border-color: #f2dc94; }
+h1 span { color: var(--brand); }
+.page-heading .eyebrow { color: #c99a00; }
+.button-primary { color: #fff; background: #151515; }
+.button-primary:hover { background: #2c2c2c; }
+.button-quiet:hover { background: #f4f4f1; }
+
+.metric { background: var(--panel-dark); border-color: var(--panel-dark); }
+.metric-label { color: #a3a39e; }
+.metric-value { color: #fff; }
+.metric-caption { color: #7d7d78; }
+.metric-icon.green, .metric-icon.orange, .metric-icon.blue, .metric-icon.pink { color: var(--brand-ink); background: var(--brand-soft); }
+.panel { border-color: var(--line); }
+.revenue-panel, .pulse-panel { background: var(--panel-dark); border-color: var(--panel-dark); }
+.revenue-panel h2, .pulse-panel h2, .chart-summary > strong, .plan-item-heading strong { color: #fff; }
+.revenue-panel .eyebrow, .pulse-panel .eyebrow, .chart-summary-caption, .empty-plans { color: #8a8a85; }
+.select-wrap select { color: #d8d8d3; background: #242424; border-color: #343434; }
+.plan-item-heading { color: #cfcfca; }
+.plan-track { background: #2c2c2c; }
+.plan-track i { background: var(--brand); }
+
+thead { background: #f4f4f1; }
+th { color: #8a8a85; }
+td { color: #55554f; border-bottom-color: #efefec; }
+.member-cell strong { color: #151515; }
+.member-cell small { color: #8a8a85; }
+.plan-cell, .date-cell { color: #66665f; }
+.member-avatar.mint { color: var(--brand-ink); background: var(--brand-soft); }
+.member-avatar.blue, .member-avatar.lilac, .member-avatar.gray { color: #55554f; background: #ececE8; }
+.filter-count { color: #66665f; background: #efefec; }
+.filter-tab.active { color: #fff; background: #151515; border-color: #151515; }
+.filter-tab.active .filter-count { color: #fff; background: #ffffff26; }
+.action-btn.action-renew { color: #fff; background: #151515; border-color: #151515; }
+.action-btn.action-renew:hover { background: #2c2c2c; }
+
+.member-form input:focus, .member-form select:focus, .login-form input:focus, .history-select-input:focus { border-color: var(--brand); outline: 2px solid var(--brand); outline-offset: 0; }
+.consent-field input { accent-color: var(--brand); }
+.api-notice button { color: #151515; text-decoration: underline; }
+.toast-success { color: var(--brand); background: #151515; }
+.dialog-backdrop { background: #0a0a0acc; }
+.history-selector-banner { border-color: var(--line); }
+.history-member-summary-card { background: linear-gradient(135deg, #fffdf5 0%, #fff3cf 100%); border-color: #f2dc94; }
+.history-member-details span { color: #66665f; }
+
+.login-page { background: radial-gradient(ellipse at 12% 8%, #fff0b8 0, transparent 42%), radial-gradient(ellipse at 92% 90%, #e9e9e5 0, transparent 40%), #f5f5f2; }
+.login-panel { border-color: var(--line); box-shadow: 0 16px 55px #0000001a; }
+.login-logo { display: block; width: 210px; height: auto; margin: -8px auto 18px; }
+.login-logo.brand-wordmark { width: auto; color: #151515; text-align: center; }
+.login-tabs { background: #efefec; }
+.login-tab.active { color: #151515; }
+.loading-screen { color: #66665f; background: #f5f5f2; }
+@media (max-width: 760px) { .brand-logo { width: 46px; margin: 0; } .brand { padding-bottom: 24px; } }

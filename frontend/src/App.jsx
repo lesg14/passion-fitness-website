@@ -10,7 +10,6 @@ import {
   ChevronDown,
   CircleHelp,
   CreditCard,
-  Dumbbell,
   Edit2,
   LayoutDashboard,
   LogOut,
@@ -97,6 +96,13 @@ function getAvatarTone(estado) {
   return 'lilac';
 }
 
+// Cae a texto mientras frontend/public/logo.png no exista.
+function BrandLogo({ className }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) return <span className={`brand-wordmark ${className}`}>PASION FITNESS</span>;
+  return <img className={className} src="/logo.png" alt="Pasion Fitness" onError={() => setFailed(true)} />;
+}
+
 function LoginScreen({ onLogin, connectionError }) {
   const [role, setRole] = useState('admin');
   const [username, setUsername] = useState('');
@@ -120,15 +126,7 @@ function LoginScreen({ onLogin, connectionError }) {
   return (
     <main className="login-page">
       <section className="login-panel">
-        <a className="brand login-brand" href="#inicio">
-          <span className="brand-mark">
-            <Dumbbell size={19} />
-          </span>
-          <span className="brand-copy">
-            <strong>passion</strong>
-            <small>FITNESS CLUB</small>
-          </span>
-        </a>
+        <BrandLogo className="login-logo" />
 
         <div className="login-tabs" role="tablist" aria-label="Tipo de acceso">
           <button
@@ -1619,8 +1617,8 @@ function PlansManagementView({ onBackToDashboard, showToast, onPlanListChanged }
                               width: 32,
                               height: 32,
                               borderRadius: 6,
-                              background: plan.activo ? '#e8f3ea' : '#f0f2ef',
-                              color: plan.activo ? '#367559' : '#889186',
+                              background: plan.activo ? '#fff1c2' : '#f0f0ed',
+                              color: plan.activo ? '#8a6a00' : '#889186',
                               display: 'grid',
                               placeItems: 'center',
                               fontWeight: 700,
@@ -1674,7 +1672,7 @@ function PlansManagementView({ onBackToDashboard, showToast, onPlanListChanged }
                             className="action-btn"
                             type="button"
                             onClick={() => handleToggleActive(plan)}
-                            style={{ color: plan.activo ? '#aa744b' : '#367559' }}
+                            style={{ color: plan.activo ? '#aa744b' : '#151515' }}
                             title={plan.activo ? 'Pausar plan' : 'Activar plan'}
                           >
                             {plan.activo ? 'Pausar' : 'Activar'}
@@ -2095,7 +2093,7 @@ function PaymentHistoryView({
                             }}
                             title="Filtrar por este miembro"
                           >
-                            <strong style={{ color: '#276948', fontSize: 11, display: 'block' }}>
+                            <strong style={{ color: '#151515', fontSize: 11, display: 'block' }}>
                               {payment.member_nombre}
                             </strong>
                             <small style={{ color: '#778077', fontSize: 10 }}>
@@ -2357,13 +2355,7 @@ export default function App() {
           }}
           aria-label="Passion Fitness, inicio"
         >
-          <span className="brand-mark">
-            <Dumbbell size={19} />
-          </span>
-          <span className="brand-copy">
-            <strong>passion</strong>
-            <small>FITNESS CLUB</small>
-          </span>
+          <BrandLogo className="brand-logo" />
         </a>
 
         <div className="sidebar-label">GESTIÓN</div>
@@ -2372,29 +2364,19 @@ export default function App() {
             type="button"
             className={`nav-link ${activeTab === 'dashboard' ? 'selected' : ''}`}
             onClick={() => setActiveTab('dashboard')}
-            style={{ width: '100%', background: activeTab === 'dashboard' ? '#ffffff16' : 'transparent', border: 0, cursor: 'pointer', textAlign: 'left' }}
           >
             <LayoutDashboard size={18} />
             <span>Resumen</span>
-            {activeTab === 'dashboard' && <i className="nav-indicator" />}
           </button>
 
           <button
             type="button"
             className={`nav-link ${activeTab === 'members' ? 'selected' : ''}`}
             onClick={() => setActiveTab('members')}
-            style={{
-              width: '100%',
-              background: activeTab === 'members' ? '#ffffff16' : 'transparent',
-              border: 0,
-              cursor: 'pointer',
-              textAlign: 'left',
-            }}
           >
             <Users size={18} />
             <span>Miembros</span>
             <small className="nav-count">{metrics?.miembros ?? '—'}</small>
-            {activeTab === 'members' && <i className="nav-indicator" />}
           </button>
 
           <button
@@ -2404,17 +2386,9 @@ export default function App() {
               setHistoryMemberId(null);
               setActiveTab('history');
             }}
-            style={{
-              width: '100%',
-              background: activeTab === 'history' ? '#ffffff16' : 'transparent',
-              border: 0,
-              cursor: 'pointer',
-              textAlign: 'left',
-            }}
           >
             <Receipt size={18} />
             <span>Historial de Pagos</span>
-            {activeTab === 'history' && <i className="nav-indicator" />}
           </button>
 
           {isAdmin && (
@@ -2422,17 +2396,9 @@ export default function App() {
               type="button"
               className={`nav-link ${activeTab === 'plans' ? 'selected' : ''}`}
               onClick={() => setActiveTab('plans')}
-              style={{
-                width: '100%',
-                background: activeTab === 'plans' ? '#ffffff16' : 'transparent',
-                border: 0,
-                cursor: 'pointer',
-                textAlign: 'left',
-              }}
             >
               <SlidersHorizontal size={18} />
               <span>Gestionar Planes</span>
-              {activeTab === 'plans' && <i className="nav-indicator" />}
             </button>
           )}
         </nav>
