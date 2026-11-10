@@ -13,6 +13,7 @@ import {
   Edit2,
   LayoutDashboard,
   LogOut,
+  Menu,
   Plus,
   Receipt,
   Search,
@@ -2191,6 +2192,7 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(true);
   const [connectionError, setConnectionError] = useState('');
   const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard' | 'members' | 'history' | 'plans'
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [historyMemberId, setHistoryMemberId] = useState(null);
   const [period, setPeriod] = useState(6);
   const [query, setQuery] = useState('');
@@ -2344,14 +2346,22 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      {/* Barra lateral permanente (sin perder el menú lateral) */}
-      <aside className="sidebar">
+      {mobileMenuOpen && (
+        <button
+          className="mobile-menu-backdrop"
+          type="button"
+          aria-label="Cerrar menú"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+      <aside className={`sidebar ${mobileMenuOpen ? 'mobile-open' : ''}`}>
         <a
           className="brand"
           href="#resumen"
           onClick={(e) => {
             e.preventDefault();
             setActiveTab('dashboard');
+            setMobileMenuOpen(false);
           }}
           aria-label="Passion Fitness, inicio"
         >
@@ -2363,7 +2373,10 @@ export default function App() {
           <button
             type="button"
             className={`nav-link ${activeTab === 'dashboard' ? 'selected' : ''}`}
-            onClick={() => setActiveTab('dashboard')}
+            onClick={() => {
+              setActiveTab('dashboard');
+              setMobileMenuOpen(false);
+            }}
           >
             <LayoutDashboard size={18} />
             <span>Resumen</span>
@@ -2372,7 +2385,10 @@ export default function App() {
           <button
             type="button"
             className={`nav-link ${activeTab === 'members' ? 'selected' : ''}`}
-            onClick={() => setActiveTab('members')}
+            onClick={() => {
+              setActiveTab('members');
+              setMobileMenuOpen(false);
+            }}
           >
             <Users size={18} />
             <span>Miembros</span>
@@ -2385,6 +2401,7 @@ export default function App() {
             onClick={() => {
               setHistoryMemberId(null);
               setActiveTab('history');
+              setMobileMenuOpen(false);
             }}
           >
             <Receipt size={18} />
@@ -2395,7 +2412,10 @@ export default function App() {
             <button
               type="button"
               className={`nav-link ${activeTab === 'plans' ? 'selected' : ''}`}
-              onClick={() => setActiveTab('plans')}
+              onClick={() => {
+                setActiveTab('plans');
+                setMobileMenuOpen(false);
+              }}
             >
               <SlidersHorizontal size={18} />
               <span>Gestionar Planes</span>
@@ -2433,6 +2453,15 @@ export default function App() {
       {/* Área principal de contenido */}
       <main className="main-content">
         <header className="topbar">
+          <button
+            className="mobile-menu-toggle"
+            type="button"
+            aria-label={mobileMenuOpen ? 'Cerrar menú' : 'Abrir menú'}
+            aria-expanded={mobileMenuOpen}
+            onClick={() => setMobileMenuOpen((open) => !open)}
+          >
+            <Menu size={19} />
+          </button>
           <div className="breadcrumb">
             <span>Passion Fitness</span>
             <i>/</i>
