@@ -16,9 +16,17 @@ passion-fitness-website/
 │       ├── billing/         # membresías y pagos (registrar_pago)
 │       └── dashboard/       # estadísticas y API REST
 ├── frontend/                # Aplicación React/Vite
-│   ├── index.html            # Entrada de Vite
-│   └── src/                  # Interfaz React
+│   ├── index.html           # Entrada de Vite
+│   ├── package.json         # Dependencias y comandos del frontend
+│   ├── package-lock.json    # Versiones fijadas de dependencias
+│   ├── vite.config.js       # Configuración de Vite y proxy
+│   └── src/                 # Interfaz React y recursos
+├── docs/
+│   └── adr/                 # Decisiones de arquitectura
+├── .env.example             # Ejemplo de variables de entorno
 ├── .gitignore
+├── AGENTS.md                # Reglas de negocio para agentes
+├── ASUNCIONES.md            # Supuestos y decisiones pendientes
 └── README.md
 ```
 
@@ -109,6 +117,17 @@ Todos los endpoints requieren sesión autenticada (`is_staff`). Las operaciones 
 | `GET` | `/api/payments/?member_id=<id>` | Staff/Admin | Consultar historial de pagos; `search` acepta nombre, documento, plan o referencia |
 | `POST` | `/api/payments/` | Staff/Admin | Registrar pago y renovar membresía a un miembro existente |
 | `POST` | `/api/payments/<id>/void/` | Admin | Marcar el pago como anulado y excluirlo de ingresos; no cambia las fechas de membresía |
+| `POST` | `/api/memberships/<id>/freeze/` | Admin | Añadir 5 días a una membresía vigente, una sola vez |
+| `PATCH` | `/api/memberships/<id>/start-date/` | Staff/Admin | Corregir `fecha_inicio`, desplazando `fecha_fin` para conservar la duración |
+
+En **Historial de Pagos**, cada registro permite corregir el inicio de su membresía; el administrador también puede congelarla si está vigente y no se ha congelado antes. La corrección conserva los cinco días adicionales si ya se aplicaron. Ninguna de estas operaciones crea pagos ni modifica los ingresos u otras membresías; revisa posibles solapamientos con renovaciones existentes.
+
+Para activar la nueva funcionalidad en una base existente, aplica las migraciones:
+
+```powershell
+Push-Location backend
+..\.venv\Scripts\python manage.py migrate
+```
 
 ### Estados calculados de membresía
 
