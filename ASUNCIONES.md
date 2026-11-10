@@ -24,7 +24,8 @@ Este documento reúne decisiones provisionales e incógnitas que conviene confir
 - Se asume que la fecha del pago y la fecha de inicio de la membresía son conceptos distintos. Actualmente el endpoint de pago no permite indicar la fecha del pago; esta toma el valor predeterminado del sistema.
 - El sistema acepta una fecha de inicio explícita. No se ha definido una política de negocio para evitar períodos superpuestos, permitir retroactividad, exigir que la fecha sea futura o corregir una fecha ingresada por error.
 - Las membresías históricas conservan sus fechas al cambiar o desactivar un plan. No está definido si modificar el nombre de un plan debe cambiar cómo se presenta en el historial.
-- No se define una pausa, congelación, transferencia, prórroga por cierre del gimnasio ni cancelación anticipada de membresías.
+- La congelación añade cinco días a una membresía vigente, una sola vez y por acción del administrador. No se define una pausa con fechas de ausencia, transferencia, prórroga por cierre del gimnasio ni cancelación anticipada.
+- La corrección del inicio desplaza la fecha final sin crear un pago y conserva la congelación. Otras membresías no se modifican; queda por definir cómo resolver posibles solapamientos con renovaciones.
 
 ## Miembros y operación
 
