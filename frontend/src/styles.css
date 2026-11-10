@@ -372,7 +372,7 @@ button { color: inherit; }
 .mobile-menu-toggle:active { transform: scale(.96); }
 .main-content { width: 100%; min-width: 0; margin-left: 0; overflow-x: clip; }
 .brand { justify-content: center; padding: 0 0 22px; }
-.brand-logo { display: block; width: 176px; height: auto; margin: -6px auto 0; }
+.brand-logo { display: block; width: 176px; height: auto; margin: -6px auto 0; padding: 4px; border-radius: 12px; background: #fff; }
 .brand-wordmark { color: var(--brand); font: 800 15px 'Manrope', sans-serif; letter-spacing: 1.5px; }
 .sidebar-label { color: #6f6f6a; }
 .nav-indicator { display: none; }
