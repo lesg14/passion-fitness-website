@@ -56,12 +56,16 @@ Período de validez de una membresía para un miembro en un plan.
 - `plan`: Referencia al plan (no se puede eliminar si hay membresías).
 - `fecha_inicio`: Fecha de inicio de vigencia.
 - `fecha_fin`: Fecha de fin de vigencia.
+- `congelada`: Indica si ya se aplicó la congelación de cinco días a esta membresía.
 
 **Restricciones de negocio:**
 - Toda membresía está vinculada a un pago; se crean juntas en una transacción atómica.
 - `fecha_fin ≥ fecha_inicio` siempre.
 - Una membresía se considera vigente si: `fecha_inicio <= hoy <= fecha_fin` (zona horaria: `America/Bogota`).
-- Una membresía no se puede eliminar ni modificar; solo se crea con un pago.
+- La API crea una membresía con un pago y permite modificar sus fechas únicamente mediante las operaciones de congelación y corrección de inicio.
+- El administrador puede congelar una membresía vigente una sola vez; la congelación añade cinco días calendario a `fecha_fin`.
+- Recepción o administración pueden corregir `fecha_inicio`; `fecha_fin` se desplaza la misma cantidad de días, conservando la duración y la congelación ya aplicada.
+- Estas operaciones no crean pagos ni modifican otras membresías; podrían producir solapamientos con renovaciones existentes.
 - El sistema permite múltiples membresías simultáneas para un miembro (aunque operativamente se usa la más reciente).
 
 ---
@@ -119,6 +123,7 @@ Operaciones permitidas:
 - Registrar nuevos miembros (crear `Member` + `Payment` + `Membership`).
 - Actualizar datos de contacto de miembros activos (nombres, apellidos, teléfono, email).
 - Registrar pagos y renovar membresías.
+- Corregir la fecha de inicio de una membresía de un miembro no archivado, sin crear un pago.
 - Consultar dashboard y estadísticas.
 - Listar planes activos.
 - Buscar y filtrar miembros (solo activos, no archivados).
@@ -130,6 +135,7 @@ Operaciones **prohibidas:**
 - Editar documentos de identidad de miembros.
 - Archivar o restaurar miembros.
 - Anular pagos.
+- Congelar membresías.
 - Ver miembros archivados.
 - Acceder a controles administrativos.
 
@@ -143,12 +149,19 @@ Operaciones permitidas:
 - Editar documento de identidad de un miembro.
 - Archivar (`archivado = true`) o restaurar (`archivado = false`) miembros.
 - Anular pagos (`Payment.anulado = true`).
+- Congelar una membresía vigente una sola vez, añadiendo cinco días.
 - Incluir miembros archivados en búsquedas y directorio (`include_archived=true`).
 - Eliminar un plan (si no tiene membresías activas); si tiene, se desactiva lógicamente.
 
 ---
 
 ## Operaciones Críticas
+
+### Congelar o corregir una membresía
+
+- `POST /api/memberships/<id>/freeze/`: administrador; solo para una membresía vigente y no congelada. Añade cinco días a la fecha final y registra `congelada = true`.
+- `PATCH /api/memberships/<id>/start-date/`: recepción o administrador; recibe `{"fecha_inicio": "AAAA-MM-DD"}` y desplaza la fecha final por la misma diferencia. Recepción no puede modificar membresías de miembros archivados.
+- Ninguna operación crea ni altera pagos, importes o ingresos. Las demás membresías no se desplazan automáticamente; verificar posibles solapamientos.
 
 ### Registrar Miembro con Primera Membresía
 
