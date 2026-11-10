@@ -25,6 +25,7 @@ import {
   X,
 } from 'lucide-react';
 import { apiRequest } from './api.js';
+import brandLogo from './passion-fitness-logo.png';
 
 const RevenueChart = lazy(() => import('./RevenueChart.jsx'));
 
@@ -97,11 +98,10 @@ function getAvatarTone(estado) {
   return 'lilac';
 }
 
-// Cae a texto mientras frontend/public/logo.png no exista.
 function BrandLogo({ className }) {
   const [failed, setFailed] = useState(false);
-  if (failed) return <span className={`brand-wordmark ${className}`}>PASION FITNESS</span>;
-  return <img className={className} src="/logo.png" alt="Pasion Fitness" onError={() => setFailed(true)} />;
+  if (failed) return <span className={`brand-wordmark ${className}`}>PASSION FITNESS</span>;
+  return <img className={className} src={brandLogo} alt="Passion Fitness" onError={() => setFailed(true)} />;
 }
 
 function LoginScreen({ onLogin, connectionError }) {
@@ -1796,12 +1796,76 @@ function VoidPaymentConfirmDialog({ payment, onClose, onSuccess }) {
   );
 }
 
+function MembershipChangeDialog({ payment, action, onClose, onSuccess }) {
+  const [startDate, setStartDate] = useState(payment.fecha_inicio);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const isFreeze = action === 'freeze';
+
+  async function submit(event) {
+    event.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      await apiRequest(`/memberships/${payment.membership_id}/${isFreeze ? 'freeze' : 'start-date'}/`, {
+        method: isFreeze ? 'POST' : 'PATCH',
+        ...(isFreeze ? {} : { body: { fecha_inicio: startDate } }),
+      });
+      onSuccess(isFreeze ? 'Membresía congelada: se añadieron 5 días.' : 'Fecha de inicio corregida.');
+      onClose();
+    } catch (requestError) {
+      setError(requestError.message);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="dialog-backdrop" onMouseDown={(event) => event.target === event.currentTarget && !busy && onClose()}>
+      <section className="dialog" role="dialog" aria-modal="true" aria-labelledby="membership-change-title">
+        <div className="dialog-heading">
+          <div>
+            <span className="eyebrow">MEMBRESÍA · {payment.member_nombre}</span>
+            <h2 id="membership-change-title">{isFreeze ? 'Congelar membresía' : 'Corregir fecha de inicio'}</h2>
+          </div>
+          <button className="icon-button" type="button" onClick={onClose} disabled={busy} aria-label="Cerrar">
+            <X size={19} />
+          </button>
+        </div>
+        <p>
+          {isFreeze
+            ? `Se añadirán 5 días a la fecha final (${formatDate(payment.fecha_fin)}). Solo puede hacerse una vez.`
+            : 'La fecha final se desplazará para conservar la duración, incluidos los días de congelación.'}
+          {' '}No se creará ningún pago ni se modificarán otras membresías.
+        </p>
+        <form onSubmit={submit}>
+          {!isFreeze && (
+            <div className="form-row">
+              <label>
+                Nueva fecha de inicio
+                <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} required />
+              </label>
+            </div>
+          )}
+          {error && <p className="form-error" role="alert">{error}</p>}
+          <div className="dialog-actions">
+            <button className="button button-quiet" type="button" onClick={onClose} disabled={busy}>Cancelar</button>
+            <button className="button button-primary" type="submit" disabled={busy}>
+              {busy ? 'Guardando…' : isFreeze ? 'Confirmar congelación' : 'Guardar corrección'}
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
+}
+
 function PaymentHistoryView({
   members,
   initialMemberId,
   isAdmin,
   onBackToDashboard,
   onOpenRenew,
+  onRefreshData,
   showToast,
 }) {
   const [selectedMemberId, setSelectedMemberId] = useState(initialMemberId ? String(initialMemberId) : '');
@@ -1811,6 +1875,7 @@ function PaymentHistoryView({
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('todos');
   const [selectedPaymentForVoid, setSelectedPaymentForVoid] = useState(null);
+  const [membershipChange, setMembershipChange] = useState(null);
 
   async function loadPayments(memberId) {
     setLoading(true);
@@ -2065,7 +2130,7 @@ function PaymentHistoryView({
                   <th>REFERENCIA</th>
                   <th>REGISTRADO POR</th>
                   <th>ESTADO</th>
-                  {isAdmin && <th style={{ textAlign: 'right', paddingRight: 14 }}>ACCIONES</th>}
+                  <th style={{ textAlign: 'right', paddingRight: 14 }}>ACCIONES</th>
                 </tr>
               </thead>
               <tbody>
@@ -2110,6 +2175,7 @@ function PaymentHistoryView({
                         <small style={{ display: 'block', color: '#68776b', fontSize: 10 }}>
                           {formatDate(payment.fecha_inicio)} al {formatDate(payment.fecha_fin)}
                         </small>
+                        {payment.congelada && <small style={{ display: 'block' }}>Congelada (+5 días)</small>}
                       </td>
                       <td>
                         <span style={{ fontSize: 11, textTransform: 'capitalize', color: '#445247' }}>
@@ -2137,10 +2203,21 @@ function PaymentHistoryView({
                           {payment.anulado ? 'Anulado' : 'Pagado'}
                         </span>
                       </td>
-                      {isAdmin && (
-                        <td>
+                      <td>
                           <div className="member-actions">
-                            {!payment.anulado ? (
+                            {(isAdmin || !payment.member_archivado) && (
+                              <button className="action-btn" type="button"
+                                onClick={() => setMembershipChange({ payment, action: 'start-date' })}>
+                                Corregir inicio
+                              </button>
+                            )}
+                            {isAdmin && payment.membresia_vigente && !payment.congelada && (
+                              <button className="action-btn" type="button"
+                                onClick={() => setMembershipChange({ payment, action: 'freeze' })}>
+                                Congelar
+                              </button>
+                            )}
+                            {isAdmin && !payment.anulado ? (
                               <button
                                 className="action-btn action-delete"
                                 type="button"
@@ -2149,19 +2226,18 @@ function PaymentHistoryView({
                               >
                                 Anular
                               </button>
-                            ) : (
+                            ) : isAdmin ? (
                               <span style={{ fontSize: 10, color: '#b73824', fontStyle: 'italic' }}>
                                 Anulado
                               </span>
-                            )}
+                            ) : null}
                           </div>
-                        </td>
-                      )}
+                      </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={selectedMember ? (isAdmin ? 8 : 7) : (isAdmin ? 9 : 8)} className="empty-state">
+                    <td colSpan={selectedMember ? 8 : 9} className="empty-state">
                       No se encontraron pagos con los filtros seleccionados.
                     </td>
                   </tr>
@@ -2180,6 +2256,18 @@ function PaymentHistoryView({
           onSuccess={(msg) => {
             showToast(msg);
             loadPayments(selectedMemberId);
+          }}
+        />
+      )}
+      {membershipChange && (
+        <MembershipChangeDialog
+          payment={membershipChange.payment}
+          action={membershipChange.action}
+          onClose={() => setMembershipChange(null)}
+          onSuccess={(message) => {
+            showToast(message);
+            loadPayments(selectedMemberId);
+            onRefreshData();
           }}
         />
       )}
@@ -2514,6 +2602,7 @@ export default function App() {
             isAdmin={isAdmin}
             onBackToDashboard={() => setActiveTab('dashboard')}
             onOpenRenew={(member) => setSelectedMemberForRenewal(member)}
+            onRefreshData={() => setRefreshKey((current) => current + 1)}
             showToast={showToast}
           />
         ) : (
