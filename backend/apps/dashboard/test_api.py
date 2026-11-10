@@ -152,6 +152,132 @@ class DashboardApiTests(TestCase):
         self.assertEqual(filtered_resp.status_code, 200)
         self.assertEqual(len(filtered_resp.json()), 1)
 
+    def test_freeze_is_admin_only_once_and_does_not_change_payments(self):
+        payment = registrar_pago(self.member, self.plan, 'efectivo')
+        membership = payment.membership
+        original_end = membership.fecha_fin
+        url = f'/api/memberships/{membership.id}/freeze/'
+        self.client.force_login(self.staff)
+        self.assertEqual(self.client.post(url).status_code, 403)
+        self.client.force_login(self.admin)
+        before = self.client.get('/api/dashboard/').json()['metrics']['ingresos_mes']
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 200, response.content)
+        membership.refresh_from_db()
+        self.assertEqual(membership.fecha_fin, original_end + timedelta(days=5))
+        self.assertTrue(membership.congelada)
+        self.assertEqual(self.client.post(url).status_code, 400)
+        membership.refresh_from_db()
+        self.assertEqual(membership.fecha_fin, original_end + timedelta(days=5))
+        self.assertEqual(Payment.objects.count(), 1)
+        payment.refresh_from_db()
+        self.assertEqual(payment.monto_cop, self.plan.precio_cop)
+        self.assertEqual(self.client.get('/api/dashboard/').json()['metrics']['ingresos_mes'], before)
+        entry = self.client.get('/api/payments/').json()[0]
+        self.assertEqual(entry['membership_id'], membership.id)
+        self.assertTrue(entry['congelada'])
+        self.assertTrue(entry['membresia_vigente'])
+        renewal = registrar_pago(self.member, self.plan, 'nequi')
+        self.assertEqual(renewal.membership.fecha_inicio, membership.fecha_fin + timedelta(days=1))
+
+    def test_freeze_only_accepts_current_memberships(self):
+        self.client.force_login(self.admin)
+        for start, end in (
+            (self.hoy - timedelta(days=3), self.hoy - timedelta(days=1)),
+            (self.hoy + timedelta(days=1), self.hoy + timedelta(days=3)),
+        ):
+            membership = Membership.objects.create(
+                member=self.member, plan=self.plan, fecha_inicio=start, fecha_fin=end,
+            )
+            response = self.client.post(f'/api/memberships/{membership.id}/freeze/')
+            self.assertEqual(response.status_code, 400)
+            membership.refresh_from_db()
+            self.assertFalse(membership.congelada)
+            self.assertEqual(membership.fecha_fin, end)
+        self.assertEqual(self.client.post('/api/memberships/999999/freeze/').status_code, 404)
+
+    def test_freeze_allows_membership_on_its_final_day(self):
+        membership = Membership.objects.create(
+            member=self.member, plan=self.plan,
+            fecha_inicio=self.hoy - timedelta(days=29), fecha_fin=self.hoy,
+        )
+        self.client.force_login(self.admin)
+        response = self.client.post(f'/api/memberships/{membership.id}/freeze/')
+        self.assertEqual(response.status_code, 200, response.content)
+        membership.refresh_from_db()
+        self.assertEqual(membership.fecha_fin, self.hoy + timedelta(days=5))
+
+    def test_staff_corrects_start_preserving_duration_freeze_and_income(self):
+        payment = registrar_pago(self.member, self.plan, 'efectivo')
+        membership = payment.membership
+        self.client.force_login(self.admin)
+        self.assertEqual(self.client.post(f'/api/memberships/{membership.id}/freeze/').status_code, 200)
+        membership.refresh_from_db()
+        old_start, old_end = membership.fecha_inicio, membership.fecha_fin
+        other = registrar_pago(self.member, self.plan, 'nequi').membership
+        old_other_start, old_other_end = other.fecha_inicio, other.fecha_fin
+        self.client.force_login(self.staff)
+        income = self.client.get('/api/dashboard/').json()['metrics']['ingresos_mes']
+        new_start = old_start - timedelta(days=7)
+        response = self.client.patch(
+            f'/api/memberships/{membership.id}/start-date/',
+            data=json.dumps({'fecha_inicio': new_start.isoformat()}),
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        membership.refresh_from_db()
+        other.refresh_from_db()
+        self.assertEqual(membership.fecha_inicio, new_start)
+        self.assertEqual(membership.fecha_fin, old_end - timedelta(days=7))
+        self.assertTrue(membership.congelada)
+        self.assertEqual((other.fecha_inicio, other.fecha_fin), (old_other_start, old_other_end))
+        self.assertEqual(Payment.objects.count(), 2)
+        self.assertEqual(self.client.get('/api/dashboard/').json()['metrics']['ingresos_mes'], income)
+        entry = next(p for p in self.client.get('/api/payments/').json() if p['id'] == payment.id)
+        self.assertEqual(entry['fecha_inicio'], new_start.isoformat())
+        self.assertEqual(entry['fecha_fin'], membership.fecha_fin.isoformat())
+        self.client.force_login(self.admin)
+        self.assertEqual(self.client.post(f'/api/memberships/{membership.id}/freeze/').status_code, 400)
+
+    def test_correct_start_rejects_invalid_date_overflow_and_archived_for_staff(self):
+        payment = registrar_pago(self.member, self.plan, 'efectivo')
+        membership = payment.membership
+        url = f'/api/memberships/{membership.id}/start-date/'
+        self.client.force_login(self.staff)
+        for start in ('invalid', '9999-12-31', None):
+            response = self.client.patch(
+                url, data=json.dumps({'fecha_inicio': start}), content_type='application/json',
+            )
+            self.assertEqual(response.status_code, 400, response.content)
+        membership.refresh_from_db()
+        self.assertEqual(membership.fecha_inicio, self.hoy)
+        self.member.archivado = True
+        self.member.save(update_fields=['archivado'])
+        response = self.client.patch(
+            url, data=json.dumps({'fecha_inicio': self.hoy.isoformat()}), content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 404)
+        self.client.force_login(self.admin)
+        response = self.client.patch(
+            url, data=json.dumps({'fecha_inicio': self.hoy.isoformat()}), content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_membership_changes_require_session_and_csrf(self):
+        membership = registrar_pago(self.member, self.plan, 'efectivo').membership
+        freeze_url = f'/api/memberships/{membership.id}/freeze/'
+        date_url = f'/api/memberships/{membership.id}/start-date/'
+        self.assertEqual(self.client.post(freeze_url).status_code, 403)
+        client = Client(enforce_csrf_checks=True)
+        client.force_login(self.admin)
+        self.assertEqual(client.post(freeze_url).status_code, 403)
+        self.assertEqual(client.patch(
+            date_url, data=json.dumps({'fecha_inicio': self.hoy.isoformat()}),
+            content_type='application/json',
+        ).status_code, 403)
+        token = self.csrf_token(client)
+        self.assertEqual(client.post(freeze_url, HTTP_X_CSRFTOKEN=token).status_code, 200)
+
     def test_archiving_member_preserves_financial_history_and_can_be_reversed(self):
         payment = registrar_pago(self.member, self.plan, 'efectivo')
         self.client.force_login(self.staff)

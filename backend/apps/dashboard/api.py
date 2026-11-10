@@ -4,6 +4,7 @@ from django.contrib.auth import authenticate, get_user_model, login, logout
 from django.db import transaction
 from django.db.models import Prefetch, Q
 from django.middleware.csrf import get_token
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
@@ -415,6 +416,10 @@ class PaymentSerializer(serializers.ModelSerializer):
     plan_nombre = serializers.CharField(source='membership.plan.nombre', read_only=True)
     fecha_inicio = serializers.DateField(source='membership.fecha_inicio', read_only=True)
     fecha_fin = serializers.DateField(source='membership.fecha_fin', read_only=True)
+    membership_id = serializers.IntegerField(read_only=True)
+    congelada = serializers.BooleanField(source='membership.congelada', read_only=True)
+    membresia_vigente = serializers.BooleanField(source='membership.esta_vigente', read_only=True)
+    member_archivado = serializers.BooleanField(source='member.archivado', read_only=True)
     registrado_por_nombre = serializers.SerializerMethodField()
     metodo_display = serializers.CharField(source='get_metodo_display', read_only=True)
 
@@ -431,6 +436,10 @@ class PaymentSerializer(serializers.ModelSerializer):
             'plan_nombre',
             'fecha_inicio',
             'fecha_fin',
+            'membership_id',
+            'congelada',
+            'membresia_vigente',
+            'member_archivado',
             'monto_cop',
             'metodo',
             'metodo_display',
@@ -497,3 +506,75 @@ class PaymentVoidView(APIView):
         payment.anulado = True
         payment.save(update_fields=['anulado'])
         return Response({'id': payment.id, 'anulado': True})
+
+
+class MembershipStartDateSerializer(serializers.Serializer):
+    fecha_inicio = serializers.DateField()
+
+
+def membership_response(membership):
+    return {
+        'id': membership.id,
+        'fecha_inicio': membership.fecha_inicio.isoformat(),
+        'fecha_fin': membership.fecha_fin.isoformat(),
+        'congelada': membership.congelada,
+    }
+
+
+class MembershipFreezeView(APIView):
+    permission_classes = [IsAdminRole]
+
+    def post(self, request, pk):
+        membership = get_object_or_404(Membership, pk=pk)
+        today = timezone.localdate()
+        if membership.congelada:
+            raise serializers.ValidationError({'detail': 'Esta membresía ya fue congelada.'})
+        if not membership.fecha_inicio <= today <= membership.fecha_fin:
+            raise serializers.ValidationError({'detail': 'Solo se pueden congelar membresías vigentes.'})
+        try:
+            end_date = membership.fecha_fin + timedelta(days=5)
+        except OverflowError:
+            raise serializers.ValidationError({'detail': 'La fecha final excede el límite permitido.'})
+        updated = Membership.objects.filter(
+            pk=pk,
+            congelada=False,
+            fecha_inicio=membership.fecha_inicio,
+            fecha_fin=membership.fecha_fin,
+        ).update(fecha_fin=end_date, congelada=True)
+        if not updated:
+            return Response(
+                {'detail': 'La membresía cambió. Actualiza la información e inténtalo de nuevo.'},
+                status=status.HTTP_409_CONFLICT,
+            )
+        membership.fecha_fin = end_date
+        membership.congelada = True
+        return Response(membership_response(membership))
+
+
+class MembershipStartDateView(APIView):
+    def patch(self, request, pk):
+        queryset = Membership.objects.all()
+        if not request.user.is_superuser:
+            queryset = queryset.filter(member__archivado=False)
+        membership = get_object_or_404(queryset, pk=pk)
+        serializer = MembershipStartDateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        start_date = serializer.validated_data['fecha_inicio']
+        try:
+            end_date = start_date + (membership.fecha_fin - membership.fecha_inicio)
+        except OverflowError:
+            raise serializers.ValidationError({'fecha_inicio': 'La fecha final excede el límite permitido.'})
+        updated = queryset.filter(
+            pk=pk,
+            fecha_inicio=membership.fecha_inicio,
+            fecha_fin=membership.fecha_fin,
+            congelada=membership.congelada,
+        ).update(fecha_inicio=start_date, fecha_fin=end_date)
+        if not updated:
+            return Response(
+                {'detail': 'La membresía cambió. Actualiza la información e inténtalo de nuevo.'},
+                status=status.HTTP_409_CONFLICT,
+            )
+        membership.fecha_inicio = start_date
+        membership.fecha_fin = end_date
+        return Response(membership_response(membership))
