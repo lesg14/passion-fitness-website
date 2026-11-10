@@ -5,10 +5,11 @@ from .models import Membership, Payment
 
 @admin.register(Membership)
 class MembershipAdmin(admin.ModelAdmin):
-    list_display = ("member", "plan", "fecha_inicio", "fecha_fin", "esta_vigente")
+    list_display = ("member", "plan", "fecha_inicio", "fecha_fin", "congelada", "esta_vigente")
     list_filter = ("plan",)
     search_fields = ("member__nombres", "member__apellidos", "member__numero_documento")
     autocomplete_fields = ("member",)
+    readonly_fields = ("congelada",)
 
     @admin.display(boolean=True, description="Vigente")
     def esta_vigente(self, obj):

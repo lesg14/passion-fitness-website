@@ -10,6 +10,7 @@ class Membership(models.Model):
     plan = models.ForeignKey("plans.Plan", on_delete=models.PROTECT, related_name="memberships")
     fecha_inicio = models.DateField()
     fecha_fin = models.DateField()
+    congelada = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["-fecha_fin"]
