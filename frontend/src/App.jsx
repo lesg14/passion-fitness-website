@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useId, useMemo, useState } from 'react';
 import {
   Activity,
   AlertTriangle,
@@ -63,6 +63,14 @@ function getTodayString() {
   const m = String(now.getMonth() + 1).padStart(2, '0');
   const d = String(now.getDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
+}
+
+function getBogotaTodayString() {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Bogota', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  return `${values.year}-${values.month}-${values.day}`;
 }
 
 function getTomorrowOrNextDayString(dateString) {
@@ -223,6 +231,39 @@ function Metric({ icon: Icon, label, value, caption, tone }) {
   );
 }
 
+function ValidatedMemberInput({ errorMessage, onChange, ...props }) {
+  const [touched, setTouched] = useState(false);
+  const [invalid, setInvalid] = useState(false);
+  const errorId = useId();
+
+  function checkValidity(event) {
+    setInvalid(!event.currentTarget.validity.valid);
+  }
+
+  return (
+    <>
+      <input
+        {...props}
+        aria-invalid={touched && invalid}
+        aria-describedby={touched && invalid ? errorId : undefined}
+        onChange={(event) => {
+          if (touched) checkValidity(event);
+          onChange(event);
+        }}
+        onBlur={(event) => {
+          setTouched(true);
+          checkValidity(event);
+        }}
+        onInvalid={(event) => {
+          setTouched(true);
+          checkValidity(event);
+        }}
+      />
+      {touched && invalid && <span id={errorId} className="field-error" role="alert">{errorMessage}</span>}
+    </>
+  );
+}
+
 function MemberDialog({ plans, onClose, onAdd }) {
   const [form, setForm] = useState({
     nombres: '',
@@ -231,6 +272,7 @@ function MemberDialog({ plans, onClose, onAdd }) {
     numero_documento: '',
     telefono: '',
     email: '',
+    fecha_nacimiento: '',
     fecha_inicio: getTodayString(),
     plan_id: plans[0]?.id || '',
     metodo: 'efectivo',
@@ -260,6 +302,7 @@ function MemberDialog({ plans, onClose, onAdd }) {
     try {
       await onAdd({
         ...form,
+        fecha_nacimiento: form.fecha_nacimiento || null,
         plan_id: Number(form.plan_id),
         fecha_inicio: form.fecha_inicio,
       });
@@ -312,17 +355,23 @@ function MemberDialog({ plans, onClose, onAdd }) {
             </label>
             <label>
               Número de documento
-              <input required maxLength="20" value={form.numero_documento} onChange={update('numero_documento')} />
+              <ValidatedMemberInput required inputMode="numeric" pattern="[0-9]{10}" maxLength={10} title="Ingresa exactamente 10 dígitos numéricos." errorMessage="Ingresa exactamente 10 dígitos, sin letras ni símbolos." value={form.numero_documento} onChange={update('numero_documento')} />
             </label>
           </div>
           <div className="form-row">
             <label>
-              Teléfono
-              <input maxLength="20" value={form.telefono} onChange={update('telefono')} />
+              Teléfono (opcional)
+              <ValidatedMemberInput inputMode="numeric" pattern="[0-9]{10}" maxLength={10} title="Ingresa exactamente 10 dígitos numéricos." errorMessage="Ingresa exactamente 10 dígitos, sin letras ni símbolos, o deja el teléfono vacío." value={form.telefono} onChange={update('telefono')} />
             </label>
             <label>
-              Correo electrónico
-              <input type="email" value={form.email} onChange={update('email')} />
+              Correo electrónico (opcional)
+              <ValidatedMemberInput type="email" errorMessage="Ingresa un correo válido, por ejemplo nombre@ejemplo.com." value={form.email} onChange={update('email')} />
+            </label>
+          </div>
+          <div className="form-row">
+            <label>
+              Fecha de nacimiento (opcional)
+              <input type="date" max={getBogotaTodayString()} value={form.fecha_nacimiento} onChange={update('fecha_nacimiento')} />
             </label>
           </div>
           <div className="form-row">
@@ -575,6 +624,7 @@ function EditMemberDialog({ member, onClose, onSuccess }) {
     numero_documento: member.numero_documento || '',
     telefono: member.telefono || '',
     email: member.email || '',
+    fecha_nacimiento: member.fecha_nacimiento || '',
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -586,11 +636,11 @@ function EditMemberDialog({ member, onClose, onSuccess }) {
     setBusy(true);
     setError('');
     try {
-      const updated = await apiRequest(`/members/${member.id}/`, {
+      await apiRequest(`/members/${member.id}/`, {
         method: 'PATCH',
-        body: form,
+        body: { ...form, fecha_nacimiento: form.fecha_nacimiento || null },
       });
-      onSuccess(`Datos de ${updated.nombre} actualizados con éxito.`);
+      onSuccess(`Datos de ${form.nombres} ${form.apellidos} actualizados con éxito.`);
       onClose();
     } catch (requestError) {
       setError(requestError.message);
@@ -641,17 +691,23 @@ function EditMemberDialog({ member, onClose, onSuccess }) {
             </label>
             <label>
               Número de documento
-              <input required maxLength="20" value={form.numero_documento} onChange={update('numero_documento')} />
+              <ValidatedMemberInput required inputMode="numeric" pattern="[0-9]{10}" maxLength={10} title="Ingresa exactamente 10 dígitos numéricos." errorMessage="Ingresa exactamente 10 dígitos, sin letras ni símbolos." value={form.numero_documento} onChange={update('numero_documento')} />
             </label>
           </div>
           <div className="form-row">
             <label>
-              Teléfono
-              <input maxLength="20" value={form.telefono} onChange={update('telefono')} />
+              Teléfono (opcional)
+              <ValidatedMemberInput inputMode="numeric" pattern="[0-9]{10}" maxLength={10} title="Ingresa exactamente 10 dígitos numéricos." errorMessage="Ingresa exactamente 10 dígitos, sin letras ni símbolos, o deja el teléfono vacío." value={form.telefono} onChange={update('telefono')} />
             </label>
             <label>
-              Correo electrónico
-              <input type="email" value={form.email} onChange={update('email')} />
+              Correo electrónico (opcional)
+              <ValidatedMemberInput type="email" errorMessage="Ingresa un correo válido, por ejemplo nombre@ejemplo.com." value={form.email} onChange={update('email')} />
+            </label>
+          </div>
+          <div className="form-row">
+            <label>
+              Fecha de nacimiento (opcional)
+              <input type="date" max={getBogotaTodayString()} value={form.fecha_nacimiento} onChange={update('fecha_nacimiento')} />
             </label>
           </div>
 
