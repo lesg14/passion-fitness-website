@@ -11,10 +11,10 @@ Persona registrada en el gimnasio.
 **Atributos:**
 - `nombres`, `apellidos`: Nombre completo (máx. 100 caracteres cada uno).
 - `tipo_documento`: CC (Cédula de ciudadanía), CE (Cédula de extranjería), TI (Tarjeta de identidad), PAS (Pasaporte).
-- `numero_documento`: Identificación única por tipo (máx. 20 caracteres). Restricción: combinación `(tipo_documento, numero_documento)` es única en la base de datos.
-- `telefono`: Contacto (máx. 20 caracteres, opcional).
-- `email`: Correo electrónico (opcional).
-- `fecha_nacimiento`: Fecha de nacimiento (opcional).
+- `numero_documento`: Identificación única por tipo; al registrar o modificar debe tener exactamente 10 dígitos ASCII. Restricción: combinación `(tipo_documento, numero_documento)` es única en la base de datos.
+- `telefono`: Contacto opcional; al proporcionar o modificar debe tener exactamente 10 dígitos ASCII.
+- `email`: Correo electrónico opcional; si se proporciona, debe tener formato válido.
+- `fecha_nacimiento`: Fecha de nacimiento opcional, no posterior a hoy en Colombia.
 - `fecha_registro`: Fecha de alta en el sistema (predeterminada: hoy, zona horaria de Colombia).
 - `archivado`: Booleano (predeterminado: `false`). Marca lógica; miembros archivados permanecen en la base de datos pero se excluyen de operaciones activas.
 - `acepta_datos_en`: Timestamp de consentimiento Habeas Data (Ley 1581 de 2012, obligatorio al registrar).
@@ -121,7 +121,7 @@ El sistema evalúa el estado de un miembro en tiempo real según la zona horaria
 
 Operaciones permitidas:
 - Registrar nuevos miembros (crear `Member` + `Payment` + `Membership`).
-- Actualizar datos de contacto de miembros activos (nombres, apellidos, teléfono, email).
+- Actualizar datos de miembros no archivados (nombres, apellidos, teléfono, email y fecha de nacimiento).
 - Registrar pagos y renovar membresías.
 - Corregir la fecha de inicio de una membresía de un miembro no archivado, sin crear un pago.
 - Consultar dashboard y estadísticas.
@@ -233,7 +233,7 @@ Operaciones permitidas:
 
 **Rol:** Recepción (datos de contacto) o Administrador (incluido documento)  
 **Endpoint:** `PATCH /api/members/<id>/`  
-**Parámetros:** Cualquier combinación de `nombres`, `apellidos`, `telefono`, `email` (Recepción); además, `tipo_documento`, `numero_documento`, `archivado` (Administrador).
+**Parámetros:** Cualquier combinación de `nombres`, `apellidos`, `telefono`, `email`, `fecha_nacimiento` (Recepción); además, `tipo_documento`, `numero_documento`, `archivado` (Administrador). La fecha de nacimiento es opcional y puede establecerse en `null`.
 
 **Restricciones:**
 - No se pueden cambiar `tipo_documento` o `numero_documento` si ya existen con los mismos valores en otro miembro.
@@ -332,6 +332,9 @@ Operaciones permitidas:
 ---
 
 ## Validaciones Comunes
+
+### Datos de identificación y contacto
+Al registrar o modificar, el documento debe tener exactamente 10 dígitos para todos los tipos; el teléfono, si se proporciona, también. No se aceptan letras ni caracteres especiales. La fecha de nacimiento no puede ser posterior a hoy en `America/Bogota`. Los registros existentes no se alteran automáticamente.
 
 ### Documento Único
 Antes de crear o actualizar un miembro, se valida que no exista otra persona con el mismo `(tipo_documento, numero_documento)`. Esto es una restricción de base de datos (`UniqueConstraint`).
