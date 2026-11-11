@@ -21,4 +21,5 @@ El código agrupa ambas escrituras con `transaction.atomic` y documenta que los 
 - La operación no deja un pago sin su membresía asociada si falla una escritura.
 - Los registros de pago conservan su historial y usuario registrador.
 - Los reportes de ingresos excluyen los pagos anulados.
-- La anulación requiere una operación de negocio explícita; no equivale a borrar ni a revertir automáticamente una membresía.
+- La anulación requiere una operación de negocio explícita; no equivale a borrar el pago ni la membresía.
+- Actualización de la regla de negocio: una membresía asociada a un pago anulado deja de contar como vigente, incluso para pagos anulados anteriormente. Sus fechas y las renovaciones ya registradas se conservan.
