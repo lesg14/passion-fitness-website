@@ -2,7 +2,15 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.db import models, transaction
+from django.db.models import Exists, OuterRef
 from django.utils import timezone
+
+
+class MembershipQuerySet(models.QuerySet):
+    def operativas(self):
+        return self.filter(
+            ~Exists(Payment.objects.filter(membership_id=OuterRef("pk"), anulado=True))
+        )
 
 
 class Membership(models.Model):
@@ -11,6 +19,7 @@ class Membership(models.Model):
     fecha_inicio = models.DateField()
     fecha_fin = models.DateField()
     congelada = models.BooleanField(default=False)
+    objects = MembershipQuerySet.as_manager()
 
     class Meta:
         ordering = ["-fecha_fin"]
@@ -21,7 +30,10 @@ class Membership(models.Model):
     @property
     def esta_vigente(self):
         hoy = timezone.localdate()
-        return self.fecha_inicio <= hoy <= self.fecha_fin
+        return (
+            self.fecha_inicio <= hoy <= self.fecha_fin
+            and not self.payments.filter(anulado=True).exists()
+        )
 
 
 class Payment(models.Model):
@@ -58,7 +70,7 @@ def registrar_pago(member, plan, metodo, monto_cop=None, fecha=None, referencia=
     if fecha_inicio:
         inicio = fecha_inicio
     else:
-        ultima = member.memberships.filter(fecha_fin__gte=fecha).order_by("-fecha_fin").first()
+        ultima = member.memberships.operativas().filter(fecha_fin__gte=fecha).order_by("-fecha_fin").first()
         inicio = ultima.fecha_fin + timedelta(days=1) if ultima else fecha
     membership = Membership.objects.create(
         member=member, plan=plan, fecha_inicio=inicio, fecha_fin=inicio + timedelta(days=plan.duracion_dias - 1)
