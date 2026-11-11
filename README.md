@@ -38,6 +38,8 @@ El sistema diferencia dos perfiles de acceso:
 - **Staff / Recepción (`is_staff`)**: Registrar nuevos miembros, renovar membresías/pagos, consultar el dashboard y estadísticas, buscar y filtrar miembros.
 - **Administrador (`is_superuser`)**: Control total del sistema. Además de las funciones de recepción, puede crear y editar planes (precios y vigencias), pausar/desactivar planes, editar información de miembros, archivar/restaurar miembros y anular pagos erróneos.
 
+En el resumen de recepción se muestran las membresías que vencen hoy o en los próximos tres días, siempre que el miembro no tenga una membresía operativa con vencimiento posterior. Cada aviso permite abrir la renovación directamente. La gráfica de planes populares permanece visible; el indicador y la gráfica de ingresos solo se muestran en el resumen del administrador. Esta separación es visual: la API del dashboard y el historial de pagos conservan sus permisos actuales.
+
 ## Decisiones de arquitectura
 
 El registro de decisiones arquitectónicas está en [`docs/adr/`](docs/adr/README.md).
@@ -71,6 +73,8 @@ Mantén ambas terminales abiertas. En la pantalla de login de React puedes elegi
 ### Personal de recepción
 
 Entra como administrador y abre **Personal**. Allí puedes crear recepcionistas, editar sus datos, restablecer su contraseña y activar o desactivar su acceso. Para las dos cuentas iniciales, selecciona `recepcion1` y `recepcion2` y asigna una contraseña diferente a cada una; no se crean automáticamente ni se incluyen contraseñas predeterminadas. Las cuentas acceden desde la pestaña **Staff / Recepción** con los permisos operativos existentes.
+
+En **Personal → Mi cuenta de administrador**, cada administrador puede editar su propio usuario, nombres, apellidos y correo. También puede cambiar su contraseña introduciendo la actual. El cambio mantiene la sesión actual e invalida las demás sesiones; los cambios de nombre se reflejan inmediatamente en el saludo.
 
 La contraseña se valida con las reglas de Django y no se devuelve en las respuestas. Al cambiarla o desactivar la cuenta, sus sesiones dejan de estar autorizadas; desactivar no elimina el historial de pagos. También se pueden administrar los usuarios desde **Autenticación y autorización → Usuarios** en Django Admin: para recepción, activa «Es staff» y no actives «Es superusuario» ni concedas permisos administrativos adicionales. El administrador Django conserva sus capacidades generales de gestión de usuarios.
 
@@ -106,9 +110,10 @@ Todos los endpoints requieren sesión autenticada (`is_staff`). Las operaciones 
 | Método | Ruta | Permiso | Uso |
 | --- | --- | --- | --- |
 | `GET` | `/api/auth/csrf/` | Público | Obtener token CSRF |
-| `POST` | `/api/auth/login/` | Público | Iniciar sesión (`username`, `password`, `role`) |
-| `GET` | `/api/auth/session/` | Staff/Admin | Consultar sesión y rol actual |
+| `POST` | `/api/auth/login/` | Público | Iniciar sesión (`username`, `password`, `role`); devuelve el nombre registrado (`first_name`) |
+| `GET` | `/api/auth/session/` | Staff/Admin | Consultar sesión, nombre registrado (`first_name`) y rol actual |
 | `POST` | `/api/auth/logout/` | Staff/Admin | Cerrar sesión |
+| `GET`, `PATCH` | `/api/auth/admin-profile/` | Admin | Consultar o editar la cuenta propia; el cambio de contraseña requiere `current_password` y `password` |
 | `GET`, `POST` | `/api/staff/` | Admin | Listar y crear cuentas de recepción |
 | `GET`, `PATCH` | `/api/staff/<id>/` | Admin | Consultar o actualizar datos, contraseña y acceso de una cuenta de recepción |
 | `GET` | `/api/dashboard/?months=6` | Staff/Admin | Métricas clave, ingresos mensuales y distribución de planes |
