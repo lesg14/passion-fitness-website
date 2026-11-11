@@ -19,6 +19,8 @@ class Membership(models.Model):
     fecha_inicio = models.DateField()
     fecha_fin = models.DateField()
     congelada = models.BooleanField(default=False)
+    es_pareja = models.BooleanField(default=False)
+    grupo_pareja = models.UUIDField(null=True, blank=True, db_index=True)
     objects = MembershipQuerySet.as_manager()
 
     class Meta:
@@ -64,8 +66,9 @@ class Payment(models.Model):
 
 
 @transaction.atomic
-def registrar_pago(member, plan, metodo, monto_cop=None, fecha=None, referencia="", usuario=None, fecha_inicio=None):
+def registrar_pago(member, plan, metodo, monto_cop=None, fecha=None, referencia="", usuario=None, fecha_inicio=None, grupo_pareja=None):
     """Registra un pago y crea la membresía. Si se especifica fecha_inicio se usa; de lo contrario inicia al terminar la última vigente."""
+    member = type(member).objects.select_for_update().get(pk=member.pk)
     fecha = fecha or timezone.localdate()
     if fecha_inicio:
         inicio = fecha_inicio
@@ -73,7 +76,8 @@ def registrar_pago(member, plan, metodo, monto_cop=None, fecha=None, referencia=
         ultima = member.memberships.operativas().filter(fecha_fin__gte=fecha).order_by("-fecha_fin").first()
         inicio = ultima.fecha_fin + timedelta(days=1) if ultima else fecha
     membership = Membership.objects.create(
-        member=member, plan=plan, fecha_inicio=inicio, fecha_fin=inicio + timedelta(days=plan.duracion_dias - 1)
+        member=member, plan=plan, fecha_inicio=inicio, fecha_fin=inicio + timedelta(days=plan.duracion_dias - 1),
+        es_pareja=plan.es_pareja, grupo_pareja=grupo_pareja,
     )
     return Payment.objects.create(
         member=member,
