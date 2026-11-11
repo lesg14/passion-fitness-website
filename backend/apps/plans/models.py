@@ -6,6 +6,7 @@ class Plan(models.Model):
     precio_cop = models.PositiveIntegerField("precio (COP)")
     duracion_dias = models.PositiveIntegerField("duración (días)")
     activo = models.BooleanField(default=True)
+    es_pareja = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["duracion_dias", "nombre"]
