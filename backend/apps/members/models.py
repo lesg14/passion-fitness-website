@@ -39,7 +39,7 @@ class Member(models.Model):
     def membresia_vigente(self):
         hoy = timezone.localdate()
         return (
-            self.memberships.filter(fecha_inicio__lte=hoy, fecha_fin__gte=hoy).order_by("-fecha_fin").first()
+            self.memberships.operativas().filter(fecha_inicio__lte=hoy, fecha_fin__gte=hoy).order_by("-fecha_fin").first()
         )
 
     @property
