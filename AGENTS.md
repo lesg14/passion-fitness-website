@@ -141,6 +141,7 @@ Operaciones **prohibidas:**
 - Anular pagos.
 - Congelar membresías.
 - Ver miembros archivados.
+- Gestionar cuentas de personal.
 - Acceder a controles administrativos.
 
 ---
@@ -156,6 +157,7 @@ Operaciones permitidas:
 - Congelar una membresía vigente una sola vez, añadiendo cinco días.
 - Incluir miembros archivados en búsquedas y directorio (`include_archived=true`).
 - Eliminar un plan (si no tiene membresías activas); si tiene, se desactiva lógicamente.
+- Crear y editar cuentas de recepción, restablecer sus contraseñas y activar o desactivar su acceso desde Personal. Las cuentas usan `is_staff=true` y `is_superuser=false`; no se eliminan mediante la API. Cambiar la contraseña o desactivar el usuario invalida sus sesiones.
 
 ---
 

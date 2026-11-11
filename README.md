@@ -68,6 +68,12 @@ npm run dev
 
 Mantén ambas terminales abiertas. En la pantalla de login de React puedes elegir la pestaña **Staff / Recepción** o **Administrador** según el perfil del usuario.
 
+### Personal de recepción
+
+Entra como administrador y abre **Personal**. Allí puedes crear recepcionistas, editar sus datos, restablecer su contraseña y activar o desactivar su acceso. Para las dos cuentas iniciales, selecciona `recepcion1` y `recepcion2` y asigna una contraseña diferente a cada una; no se crean automáticamente ni se incluyen contraseñas predeterminadas. Las cuentas acceden desde la pestaña **Staff / Recepción** con los permisos operativos existentes.
+
+La contraseña se valida con las reglas de Django y no se devuelve en las respuestas. Al cambiarla o desactivar la cuenta, sus sesiones dejan de estar autorizadas; desactivar no elimina el historial de pagos. También se pueden administrar los usuarios desde **Autenticación y autorización → Usuarios** en Django Admin: para recepción, activa «Es staff» y no actives «Es superusuario» ni concedas permisos administrativos adicionales. El administrador Django conserva sus capacidades generales de gestión de usuarios.
+
 ## PostgreSQL
 
 El desarrollo local usa SQLite por defecto. Para preparar PostgreSQL 18 local:
@@ -103,6 +109,8 @@ Todos los endpoints requieren sesión autenticada (`is_staff`). Las operaciones 
 | `POST` | `/api/auth/login/` | Público | Iniciar sesión (`username`, `password`, `role`) |
 | `GET` | `/api/auth/session/` | Staff/Admin | Consultar sesión y rol actual |
 | `POST` | `/api/auth/logout/` | Staff/Admin | Cerrar sesión |
+| `GET`, `POST` | `/api/staff/` | Admin | Listar y crear cuentas de recepción |
+| `GET`, `PATCH` | `/api/staff/<id>/` | Admin | Consultar o actualizar datos, contraseña y acceso de una cuenta de recepción |
 | `GET` | `/api/dashboard/?months=6` | Staff/Admin | Métricas clave, ingresos mensuales y distribución de planes |
 | `GET` | `/api/plans/` | Staff/Admin | Listar planes (activos para staff, todos para admin) |
 | `POST` | `/api/plans/` | Admin | Crear un nuevo plan de membresía |
