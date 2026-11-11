@@ -264,7 +264,132 @@ function ValidatedMemberInput({ errorMessage, onChange, ...props }) {
   );
 }
 
-function MemberDialog({ plans, onClose, onAdd }) {
+function PairRegistrationDialog({ plans, members, initialMember, initialNew, initialPlanId, onClose, onSuccess }) {
+  const pairPlans = plans.filter((plan) => plan.es_pareja && plan.activo);
+  const blankMember = { nombres: '', apellidos: '', tipo_documento: 'CC', numero_documento: '', telefono: '', email: '', fecha_nacimiento: '', acepta_datos: false };
+  const [participants, setParticipants] = useState([
+    { member: initialMember || null, nuevo: initialNew || null, query: '', metodo: 'efectivo' },
+    { member: null, nuevo: null, query: '', metodo: 'efectivo' },
+  ]);
+  const [planId, setPlanId] = useState(initialPlanId || pairPlans[0]?.id || '');
+  const [start, setStart] = useState(getBogotaTodayString());
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const plan = pairPlans.find((item) => item.id === Number(planId));
+  const minimum = participants.reduce((date, item) => {
+    const end = item.member?.fecha_fin;
+    const tomorrow = end && end >= getBogotaTodayString() ? getTomorrowOrNextDayString(end) : '';
+    return tomorrow > date ? tomorrow : date;
+  }, '');
+  function updateParticipant(index, values) {
+    setParticipants((current) => current.map((item, i) => i === index ? { ...item, ...values } : item));
+  }
+  useEffect(() => {
+    setStart((current) => current < minimum ? minimum : current);
+  }, [minimum]);
+
+  async function submit(event) {
+    event.preventDefault();
+    if (participants.some((item) => !item.member && !item.nuevo)) {
+      setError('Selecciona o registra a las dos personas.');
+      return;
+    }
+    if (participants[0].member && participants[0].member.id === participants[1].member?.id) {
+      setError('Selecciona dos personas diferentes.');
+      return;
+    }
+    setBusy(true);
+    setError('');
+    try {
+      await apiRequest('/pair-registrations/', {
+        method: 'POST',
+        body: {
+          plan_id: Number(planId),
+          fecha_inicio: start,
+          participantes: participants.map((item) => ({
+            ...(item.member ? { member_id: item.member.id } : {
+              nuevo_miembro: { ...item.nuevo, fecha_nacimiento: item.nuevo.fecha_nacimiento || null },
+            }),
+            metodo: item.metodo,
+          })),
+        },
+      });
+      onSuccess('Plan de pareja registrado: dos pagos y membresías independientes.');
+      onClose();
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="dialog-backdrop">
+      <section className="dialog" role="dialog" aria-modal="true" aria-labelledby="pair-title">
+        <div className="dialog-heading">
+          <div><span className="eyebrow">DOS PERSONAS · DOS PAGOS</span><h2 id="pair-title">Registrar plan de pareja</h2></div>
+          <button className="icon-button" type="button" onClick={onClose} disabled={busy} aria-label="Cerrar"><X size={19} /></button>
+        </div>
+        {error && <p className="form-error" role="alert">{error}</p>}
+        <form className="member-form" onSubmit={submit}>
+          <label>Plan de pareja
+            <select required value={planId} onChange={(event) => setPlanId(event.target.value)}>
+              {pairPlans.map((item) => <option key={item.id} value={item.id}>{item.nombre} · {formatCurrency(item.precio_cop)} por persona</option>)}
+            </select>
+          </label>
+          {participants.map((item, index) => {
+            const matches = members.filter((member) => !member.archivado && item.query.trim() &&
+              `${member.nombre} ${member.numero_documento}`.toLocaleLowerCase('es').includes(item.query.trim().toLocaleLowerCase('es')));
+            return (
+              <fieldset key={index}>
+                <legend>Persona {index + 1}</legend>
+                {item.member ? (
+                  <p>{item.member.nombre} · {item.member.numero_documento} <button type="button" className="button button-quiet" onClick={() => updateParticipant(index, { member: null, query: '' })}>Cambiar</button></p>
+                ) : item.nuevo ? (
+                  <>
+                    <button type="button" className="button button-quiet" onClick={() => updateParticipant(index, { nuevo: null, query: '' })}>Buscar miembro existente</button>
+                    <div className="form-row">
+                      <label>Nombres<input required maxLength={100} value={item.nuevo.nombres} onChange={(e) => updateParticipant(index, { nuevo: { ...item.nuevo, nombres: e.target.value } })} /></label>
+                      <label>Apellidos<input required maxLength={100} value={item.nuevo.apellidos} onChange={(e) => updateParticipant(index, { nuevo: { ...item.nuevo, apellidos: e.target.value } })} /></label>
+                    </div>
+                    <div className="form-row">
+                      <label>Tipo de documento<select value={item.nuevo.tipo_documento} onChange={(e) => updateParticipant(index, { nuevo: { ...item.nuevo, tipo_documento: e.target.value } })}><option value="CC">Cédula de ciudadanía</option><option value="CE">Cédula de extranjería</option><option value="TI">Tarjeta de identidad</option><option value="PAS">Pasaporte</option></select></label>
+                      <label>Número de documento<ValidatedMemberInput required inputMode="numeric" pattern="[0-9]{10}" maxLength={10} errorMessage="Ingresa exactamente 10 dígitos." value={item.nuevo.numero_documento} onChange={(e) => updateParticipant(index, { nuevo: { ...item.nuevo, numero_documento: e.target.value } })} /></label>
+                    </div>
+                    <div className="form-row">
+                      <label>Teléfono (opcional)<ValidatedMemberInput inputMode="numeric" pattern="[0-9]{10}" maxLength={10} errorMessage="Ingresa exactamente 10 dígitos." value={item.nuevo.telefono} onChange={(e) => updateParticipant(index, { nuevo: { ...item.nuevo, telefono: e.target.value } })} /></label>
+                      <label>Correo (opcional)<ValidatedMemberInput type="email" errorMessage="Ingresa un correo válido." value={item.nuevo.email} onChange={(e) => updateParticipant(index, { nuevo: { ...item.nuevo, email: e.target.value } })} /></label>
+                    </div>
+                    <label>Fecha de nacimiento (opcional)<input type="date" max={getBogotaTodayString()} value={item.nuevo.fecha_nacimiento} onChange={(e) => updateParticipant(index, { nuevo: { ...item.nuevo, fecha_nacimiento: e.target.value } })} /></label>
+                    <label className="consent-field"><input type="checkbox" required checked={item.nuevo.acepta_datos} onChange={(e) => updateParticipant(index, { nuevo: { ...item.nuevo, acepta_datos: e.target.checked } })} /><span>El miembro autoriza el tratamiento de sus datos personales.</span></label>
+                  </>
+                ) : (
+                  <>
+                    <label>Buscar por nombre o documento<input value={item.query} onChange={(e) => updateParticipant(index, { query: e.target.value })} /></label>
+                    {matches.slice(0, 10).map((member) => <button key={member.id} type="button" className="button button-quiet" onClick={() => updateParticipant(index, { member, query: '' })}>{member.nombre} · {member.numero_documento}</button>)}
+                    {item.query.trim() && !matches.length && <p>No se encontraron miembros.</p>}
+                    <button type="button" className="button button-quiet" onClick={() => updateParticipant(index, { nuevo: { ...blankMember }, query: '' })}>Crear persona nueva</button>
+                  </>
+                )}
+                <label>Método de pago
+                  <select value={item.metodo} onChange={(e) => updateParticipant(index, { metodo: e.target.value })}>
+                    <option value="efectivo">Efectivo</option><option value="nequi">Nequi</option><option value="daviplata">Daviplata</option><option value="transferencia">Transferencia / PSE</option><option value="tarjeta">Tarjeta</option>
+                  </select>
+                </label>
+              </fieldset>
+            );
+          })}
+          <label>Fecha de inicio común<input type="date" required min={minimum} value={start} onChange={(event) => setStart(event.target.value)} /></label>
+          <p>{minimum ? `Inicio mínimo: ${formatDate(minimum)}. ` : ''}Final: {formatDate(plan ? addDaysToDate(start, plan.duracion_dias) : '')}. Total: {formatCurrency((plan?.precio_cop || 0) * 2)}.</p>
+          <p>Los pagos no se pueden anular ni corregir sus fechas de inicio. Cada persona puede congelar su membresía independientemente.</p>
+          <div className="dialog-actions"><button type="button" className="button button-quiet" onClick={onClose} disabled={busy}>Cancelar</button><button type="submit" className="button button-primary" disabled={busy || !plan}>{busy ? 'Guardando…' : 'Registrar pareja'}</button></div>
+        </form>
+      </section>
+    </div>
+  );
+}
+
+function MemberDialog({ plans, members, onClose, onAdd, onPairSuccess }) {
   const [form, setForm] = useState({
     nombres: '',
     apellidos: '',
@@ -290,6 +415,13 @@ function MemberDialog({ plans, onClose, onAdd }) {
   const calculatedEndDate = form.fecha_inicio && selectedPlan
     ? addDaysToDate(form.fecha_inicio, selectedPlan.duracion_dias)
     : '';
+  if (selectedPlan?.es_pareja) {
+    return <PairRegistrationDialog plans={plans} members={members} initialNew={{
+      nombres: form.nombres, apellidos: form.apellidos, tipo_documento: form.tipo_documento,
+      numero_documento: form.numero_documento, telefono: form.telefono, email: form.email,
+      fecha_nacimiento: form.fecha_nacimiento, acepta_datos: form.acepta_datos,
+    }} initialPlanId={selectedPlan.id} onClose={onClose} onSuccess={onPairSuccess} />;
+  }
 
   async function submit(event) {
     event.preventDefault();
@@ -441,7 +573,7 @@ function MemberDialog({ plans, onClose, onAdd }) {
   );
 }
 
-function RenewPaymentDialog({ member, plans, onClose, onSuccess }) {
+function RenewPaymentDialog({ member, plans, members, onClose, onSuccess }) {
   const initialPlan = plans.find((p) => p.id === member.plan_id) || plans[0];
   const [planId, setPlanId] = useState(initialPlan?.id || '');
   const [montoCop, setMontoCop] = useState(initialPlan?.precio_cop || '');
@@ -499,6 +631,10 @@ function RenewPaymentDialog({ member, plans, onClose, onSuccess }) {
   }
 
   const isVigente = member.estado === 'Activo' || member.estado?.startsWith('Vence');
+
+  if (selectedPlan?.es_pareja) {
+    return <PairRegistrationDialog plans={plans} members={members} initialMember={member} initialPlanId={selectedPlan.id} onClose={onClose} onSuccess={onSuccess} />;
+  }
 
   return (
     <div className="dialog-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
@@ -796,6 +932,7 @@ function EditPlanDialog({ plan, onClose, onSuccess }) {
     precio_cop: plan.precio_cop,
     duracion_dias: plan.duracion_dias,
     activo: plan.activo,
+    es_pareja: plan.es_pareja,
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -812,6 +949,7 @@ function EditPlanDialog({ plan, onClose, onSuccess }) {
           precio_cop: Number(form.precio_cop),
           duracion_dias: Number(form.duracion_dias),
           activo: Boolean(form.activo),
+          es_pareja: Boolean(form.es_pareja),
         },
       });
       onSuccess(`Plan "${updated.nombre}" actualizado con éxito.`);
@@ -875,6 +1013,11 @@ function EditPlanDialog({ plan, onClose, onSuccess }) {
               />
             </label>
           </div>
+          <label className="consent-field" style={{ marginTop: 4 }}>
+            <input type="checkbox" checked={form.es_pareja} disabled={plan.total_memberships > 0}
+              onChange={(e) => setForm({ ...form, es_pareja: e.target.checked })} />
+            <span>Plan para dos personas (precio por persona)</span>
+          </label>
           <label className="consent-field" style={{ marginTop: 4 }}>
             <input
               type="checkbox"
@@ -1325,8 +1468,10 @@ function MembersManagementView({
       {showAddMemberDialog && (
         <MemberDialog
           plans={plans}
+          members={members}
           onClose={() => setShowAddMemberDialog(false)}
           onAdd={handleCreateMember}
+          onPairSuccess={(msg) => { showToast(msg); onRefreshData(); }}
         />
       )}
 
@@ -1334,6 +1479,7 @@ function MembersManagementView({
         <RenewPaymentDialog
           member={selectedMemberForRenewal}
           plans={plans}
+          members={members}
           onClose={() => setSelectedMemberForRenewal(null)}
           onSuccess={(msg) => {
             showToast(msg);
@@ -1374,7 +1520,7 @@ function PlansManagementView({ onBackToDashboard, showToast, onPlanListChanged }
   const [filterState, setFilterState] = useState('todos');
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const [newPlan, setNewPlan] = useState({ nombre: '', precio_cop: '', duracion_dias: 30, activo: true });
+  const [newPlan, setNewPlan] = useState({ nombre: '', precio_cop: '', duracion_dias: 30, activo: true, es_pareja: false });
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState('');
   const [selectedPlanForEdit, setSelectedPlanForEdit] = useState(null);
@@ -1408,10 +1554,11 @@ function PlansManagementView({ onBackToDashboard, showToast, onPlanListChanged }
           precio_cop: Number(newPlan.precio_cop),
           duracion_dias: Number(newPlan.duracion_dias),
           activo: Boolean(newPlan.activo),
+          es_pareja: Boolean(newPlan.es_pareja),
         },
       });
       showToast(`¡Plan "${created.nombre}" creado exitosamente!`);
-      setNewPlan({ nombre: '', precio_cop: '', duracion_dias: 30, activo: true });
+      setNewPlan({ nombre: '', precio_cop: '', duracion_dias: 30, activo: true, es_pareja: false });
       setShowCreateForm(false);
       await loadPlans();
     } catch (err) {
@@ -1567,6 +1714,10 @@ function PlansManagementView({ onBackToDashboard, showToast, onPlanListChanged }
               </div>
             </div>
 
+            <label className="consent-field">
+              <input type="checkbox" checked={newPlan.es_pareja} onChange={(e) => setNewPlan({ ...newPlan, es_pareja: e.target.checked })} />
+              <span>Plan para dos personas (precio por persona)</span>
+            </label>
             <div className="dialog-actions" style={{ marginTop: 6 }}>
               <button className="button button-quiet" type="button" onClick={() => setShowCreateForm(false)}>
                 Cancelar
@@ -2262,7 +2413,7 @@ function PaymentHistoryView({
                       </td>
                       <td>
                           <div className="member-actions">
-                            {(isAdmin || !payment.member_archivado) && (
+                            {!payment.es_pareja && (isAdmin || !payment.member_archivado) && (
                               <button className="action-btn" type="button"
                                 onClick={() => setMembershipChange({ payment, action: 'start-date' })}>
                                 Corregir inicio
@@ -2274,7 +2425,7 @@ function PaymentHistoryView({
                                 Congelar
                               </button>
                             )}
-                            {isAdmin && !payment.anulado ? (
+                            {isAdmin && !payment.anulado && !payment.es_pareja ? (
                               <button
                                 className="action-btn action-delete"
                                 type="button"
@@ -2283,7 +2434,7 @@ function PaymentHistoryView({
                               >
                                 Anular
                               </button>
-                            ) : isAdmin ? (
+                            ) : isAdmin && payment.anulado ? (
                               <span style={{ fontSize: 10, color: '#b73824', fontStyle: 'italic' }}>
                                 Anulado
                               </span>
@@ -2968,8 +3119,10 @@ export default function App() {
       {showAddMemberDialog && (
         <MemberDialog
           plans={plans}
+          members={members}
           onClose={() => setShowAddMemberDialog(false)}
           onAdd={createMember}
+          onPairSuccess={(msg) => { showToast(msg); setRefreshKey((current) => current + 1); }}
         />
       )}
 
@@ -2977,6 +3130,7 @@ export default function App() {
         <RenewPaymentDialog
           member={selectedMemberForRenewal}
           plans={plans}
+          members={members}
           onClose={() => setSelectedMemberForRenewal(null)}
           onSuccess={(msg) => {
             showToast(msg);

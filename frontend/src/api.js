@@ -1,6 +1,22 @@
 const apiBase = import.meta.env.VITE_API_BASE_URL || '';
 let csrfToken = '';
 
+function formatErrors(value) {
+  if (Array.isArray(value)) {
+    return value.map(formatErrors).filter(Boolean).join(' ');
+  }
+  if (value && typeof value === 'object') {
+    return Object.entries(value)
+      .map(([field, errors]) => {
+        const detail = formatErrors(errors);
+        return detail ? `${field}: ${detail}` : '';
+      })
+      .filter(Boolean)
+      .join(' ');
+  }
+  return value == null ? '' : String(value);
+}
+
 function getCookie(name) {
   if (typeof document === 'undefined' || !document.cookie) return null;
   const match = document.cookie.match(new RegExp('(^|;\\s*)' + name + '=([^;]*)'));
@@ -52,9 +68,7 @@ export async function apiRequest(path, options = {}) {
   if (!response.ok) {
     const detail =
       data?.detail ||
-      Object.entries(data || {})
-        .map(([field, errors]) => `${field}: ${Array.isArray(errors) ? errors.join(', ') : errors}`)
-        .join(' ');
+      formatErrors(data);
 
     // Si falló por CSRF (por ejemplo cookie desfasada tras rotación de login), refrescamos y reintentamos 1 vez
     if (
