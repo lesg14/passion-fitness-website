@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { apiRequest } from './api.js';
 import brandLogo from './passion-fitness-logo.png';
+import StaffManagement from './StaffManagement.jsx';
 
 const RevenueChart = lazy(() => import('./RevenueChart.jsx'));
 const PlansChart = lazy(() => import('./PlansChart.jsx'));
@@ -2489,7 +2490,7 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [connectionError, setConnectionError] = useState('');
-  const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard' | 'members' | 'history' | 'plans'
+  const [activeTab, setActiveTab] = useState('dashboard');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [historyMemberId, setHistoryMemberId] = useState(null);
   const [period, setPeriod] = useState(6);
@@ -2719,6 +2720,15 @@ export default function App() {
               <span>Gestionar Planes</span>
             </button>
           )}
+          {isAdmin && (
+            <button type="button" className={`nav-link ${activeTab === 'staff' ? 'selected' : ''}`} onClick={() => {
+              setActiveTab('staff');
+              setMobileMenuOpen(false);
+            }}>
+              <ShieldCheck size={18} />
+              <span>Personal</span>
+            </button>
+          )}
         </nav>
 
         <div className="sidebar-bottom">
@@ -2766,6 +2776,8 @@ export default function App() {
             <strong>
               {activeTab === 'plans'
                 ? 'Planes de Membresía'
+                : activeTab === 'staff'
+                ? 'Personal'
                 : activeTab === 'members'
                 ? 'Gestión de Miembros'
                 : activeTab === 'history'
@@ -2786,7 +2798,9 @@ export default function App() {
           </div>
         </header>
 
-        {activeTab === 'plans' ? (
+        {activeTab === 'staff' && isAdmin ? (
+          <StaffManagement showToast={showToast} />
+        ) : activeTab === 'plans' ? (
           <PlansManagementView
             onBackToDashboard={() => setActiveTab('dashboard')}
             showToast={showToast}

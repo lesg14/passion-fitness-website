@@ -427,6 +427,10 @@ h1 span { color: var(--brand); }
 .plans-chart-detail { min-height: 32px; margin-top: 4px; color: #d8d8d3; font-size: 11px; line-height: 1.5; }
 .plans-chart-detail strong { color: #fff; }
 .plans-chart-note { margin: 4px 0 0; color: #a3a39e; font-size: 10px; line-height: 1.5; }
+.staff-initial { margin-bottom: 15px; padding: 14px; border: 1px solid #f2dc94; border-radius: 6px; background: #fffaf0; color: #554925; font-size: 12px; }
+.staff-initial p { margin: 0 0 8px; }
+.staff-initial > div, .staff-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.staff-password-note { margin: 0; color: #66665f; font-size: 11px; line-height: 1.5; }
 
 thead { background: #f4f4f1; }
 th { color: #8a8a85; }
