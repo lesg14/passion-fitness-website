@@ -158,6 +158,7 @@ Operaciones permitidas:
 - Incluir miembros archivados en búsquedas y directorio (`include_archived=true`).
 - Eliminar un plan (si no tiene membresías activas); si tiene, se desactiva lógicamente.
 - Crear y editar cuentas de recepción, restablecer sus contraseñas y activar o desactivar su acceso desde Personal. Las cuentas usan `is_staff=true` y `is_superuser=false`; no se eliminan mediante la API. Cambiar la contraseña o desactivar el usuario invalida sus sesiones.
+- Editar únicamente su propia cuenta administradora desde Personal. Para cambiar su contraseña debe proporcionar la actual; la sesión actual se conserva y las demás se invalidan.
 
 ---
 
