@@ -14,7 +14,7 @@ Este documento reúne decisiones provisionales e incógnitas que conviene confir
 - Se asume que registrar un pago crea una membresía vinculada. No está definido un flujo para registrar anticipos, pagos parciales, cuotas, pagos sin membresía o varios pagos para una misma membresía.
 - El monto puede diferir del precio del plan y debe ser positivo. No se especifica cómo autorizar, registrar ni reportar descuentos, recargos, devoluciones o reembolsos.
 - Los métodos admitidos hoy son efectivo, Nequi, Daviplata, transferencia/PSE y tarjeta. No se define el tratamiento de otros medios ni las comisiones de los proveedores.
-- Anular un pago conserva el registro y no cambia las fechas de la membresía. Se asume que cualquier ajuste financiero o corrección de la membresía requiere un procedimiento administrativo aparte; ese procedimiento todavía no está definido.
+- Anular un pago inactiva su membresía, conserva el registro y sus fechas, y no desplaza renovaciones posteriores ya registradas. El procedimiento de devolución o corrección de una anulación aún no está definido.
 - No se especifica qué comprobante debe entregarse, si la referencia es obligatoria para algunos métodos, ni qué información debe contener un cierre de caja.
 
 ## Membresías, vigencia y renovaciones
