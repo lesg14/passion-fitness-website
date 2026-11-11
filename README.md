@@ -111,7 +111,7 @@ Todos los endpoints requieren sesión autenticada (`is_staff`). Las operaciones 
 | `GET` | `/api/members/?search=ana` | Staff/Admin | Buscar y listar miembros activos con estado calculado |
 | `GET` | `/api/members/?include_archived=true` | Admin | Incluir miembros archivados en el directorio |
 | `POST` | `/api/members/` | Staff/Admin | Registrar miembro, consentimiento, pago y primera membresía |
-| `PATCH` | `/api/members/<id>/` | Staff/Admin | Actualizar datos del miembro (contacto, nombres, documento) |
+| `PATCH` | `/api/members/<id>/` | Staff/Admin | Actualizar datos del miembro (contacto, nombres, documento y fecha de nacimiento) |
 | `DELETE` | `/api/members/<id>/` | Admin | Archivar miembro, conservando pagos y membresías |
 | `PATCH` | `/api/members/<id>/` | Admin | Archivar (`archivado: true`) o restaurar (`archivado: false`) un miembro |
 | `GET` | `/api/payments/?member_id=<id>` | Staff/Admin | Consultar historial de pagos; `search` acepta nombre, documento, plan o referencia |
@@ -119,6 +119,12 @@ Todos los endpoints requieren sesión autenticada (`is_staff`). Las operaciones 
 | `POST` | `/api/payments/<id>/void/` | Admin | Marcar el pago como anulado y excluirlo de ingresos; no cambia las fechas de membresía |
 | `POST` | `/api/memberships/<id>/freeze/` | Admin | Añadir 5 días a una membresía vigente, una sola vez |
 | `PATCH` | `/api/memberships/<id>/start-date/` | Staff/Admin | Corregir `fecha_inicio`, desplazando `fecha_fin` para conservar la duración |
+
+La fecha de nacimiento es opcional y no puede ser posterior a hoy en Colombia; si no se conoce, se conserva como `NULL`. El número de documento debe tener exactamente 10 dígitos; el teléfono es opcional y, si se proporciona, también debe tener exactamente 10 dígitos. Estas validaciones se aplican al registrar o modificar los campos, para todos los tipos de documento. Los datos anteriores no se modifican automáticamente.
+
+El correo electrónico es opcional y, si se proporciona, debe tener un formato válido (por ejemplo, `nombre@ejemplo.com`). El formulario realiza una comprobación inicial y el servidor valida el formato al registrar o editar; estas comprobaciones no verifican que la dirección exista.
+
+El campo `user_id` vincula opcionalmente al miembro con una cuenta de Django para un posible portal de clientes; el registro actual no crea ni vincula esa cuenta.
 
 En **Historial de Pagos**, cada registro permite corregir el inicio de su membresía; el administrador también puede congelarla si está vigente y no se ha congelado antes. La corrección conserva los cinco días adicionales si ya se aplicaron. Ninguna de estas operaciones crea pagos ni modifica los ingresos u otras membresías; revisa posibles solapamientos con renovaciones existentes.
 
