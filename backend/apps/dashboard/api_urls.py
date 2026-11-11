@@ -11,6 +11,7 @@ from .api import (
     MembershipStartDateView,
     PaymentListCreateView,
     PaymentVoidView,
+    PairRegistrationView,
     PlanDetailView,
     PlanListCreateView,
     SessionView,
@@ -29,5 +30,6 @@ urlpatterns = [
     path('memberships/<int:pk>/freeze/', MembershipFreezeView.as_view(), name='api-membership-freeze'),
     path('memberships/<int:pk>/start-date/', MembershipStartDateView.as_view(), name='api-membership-start-date'),
     path('payments/', PaymentListCreateView.as_view(), name='api-payments'),
+    path('pair-registrations/', PairRegistrationView.as_view(), name='api-pair-registration'),
     path('payments/<int:pk>/void/', PaymentVoidView.as_view(), name='api-payment-void'),
 ]

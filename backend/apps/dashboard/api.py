@@ -1,4 +1,5 @@
 ﻿from datetime import timedelta
+from uuid import uuid4
 
 from django.contrib.auth import authenticate, get_user_model, login, logout
 from django.db import transaction
@@ -131,7 +132,12 @@ class PlanSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Plan
-        fields = ('id', 'nombre', 'precio_cop', 'duracion_dias', 'activo', 'total_memberships')
+        fields = ('id', 'nombre', 'precio_cop', 'duracion_dias', 'activo', 'es_pareja', 'total_memberships')
+
+    def validate_es_pareja(self, value):
+        if self.instance and value != self.instance.es_pareja and self.instance.memberships.exists():
+            raise serializers.ValidationError('No se puede cambiar el tipo de un plan con membresías registradas.')
+        return value
 
     def get_total_memberships(self, obj):
         return obj.memberships.count()
@@ -301,6 +307,8 @@ class MemberRegistrationSerializer(MemberValidationFieldsMixin, serializers.Seri
         return value
 
     def validate(self, attrs):
+        if attrs['plan'].es_pareja:
+            raise serializers.ValidationError({'plan_id': 'Registra los planes de pareja con ambos participantes.'})
         duplicate = Member.objects.filter(
             tipo_documento=attrs['tipo_documento'],
             numero_documento=attrs['numero_documento'],
@@ -416,6 +424,11 @@ class PaymentCreateSerializer(serializers.Serializer):
     referencia = serializers.CharField(max_length=100, required=False, allow_blank=True)
     fecha_inicio = serializers.DateField(required=False, allow_null=True)
 
+    def validate_plan_id(self, value):
+        if value.es_pareja:
+            raise serializers.ValidationError('Registra los planes de pareja con ambos participantes.')
+        return value
+
     def create(self, validated_data):
         return registrar_pago(
             validated_data['member'],
@@ -426,6 +439,115 @@ class PaymentCreateSerializer(serializers.Serializer):
             usuario=self.context['request'].user,
             fecha_inicio=validated_data.get('fecha_inicio'),
         )
+
+
+class PairNewMemberSerializer(MemberValidationFieldsMixin, serializers.Serializer):
+    nombres = serializers.CharField(max_length=100)
+    apellidos = serializers.CharField(max_length=100)
+    tipo_documento = serializers.ChoiceField(choices=Member.TipoDocumento.choices)
+    numero_documento = serializers.CharField(max_length=20, trim_whitespace=False)
+    telefono = serializers.CharField(max_length=20, required=False, allow_blank=True, trim_whitespace=False)
+    email = serializers.EmailField(required=False, allow_blank=True)
+    fecha_nacimiento = serializers.DateField(required=False, allow_null=True)
+    acepta_datos = serializers.BooleanField()
+
+    def validate_acepta_datos(self, value):
+        if not value:
+            raise serializers.ValidationError('Se requiere autorización para el tratamiento de datos.')
+        return value
+
+    def validate(self, attrs):
+        if Member.objects.filter(
+            tipo_documento=attrs['tipo_documento'], numero_documento=attrs['numero_documento']
+        ).exists():
+            raise serializers.ValidationError({'numero_documento': 'Ya existe un miembro con este documento.'})
+        return attrs
+
+
+class PairParticipantSerializer(serializers.Serializer):
+    member_id = serializers.PrimaryKeyRelatedField(
+        source='member', queryset=Member.objects.filter(archivado=False), required=False
+    )
+    nuevo_miembro = PairNewMemberSerializer(required=False)
+    metodo = serializers.ChoiceField(choices=Payment.Metodo.choices)
+    referencia = serializers.CharField(max_length=100, required=False, allow_blank=True)
+
+    def validate(self, attrs):
+        if ('member' in attrs) == ('nuevo_miembro' in attrs):
+            raise serializers.ValidationError('Selecciona un miembro existente o registra uno nuevo.')
+        return attrs
+
+
+class PairRegistrationSerializer(serializers.Serializer):
+    plan_id = serializers.PrimaryKeyRelatedField(
+        source='plan', queryset=Plan.objects.filter(activo=True, es_pareja=True)
+    )
+    fecha_inicio = serializers.DateField()
+    participantes = PairParticipantSerializer(many=True, min_length=2, max_length=2)
+
+    def validate_participantes(self, participants):
+        ids = [p['member'].id for p in participants if 'member' in p]
+        if len(ids) != len(set(ids)):
+            raise serializers.ValidationError('Los participantes deben ser personas diferentes.')
+        documents = [
+            (p['nuevo_miembro']['tipo_documento'], p['nuevo_miembro']['numero_documento'])
+            for p in participants if 'nuevo_miembro' in p
+        ]
+        if len(documents) != len(set(documents)):
+            raise serializers.ValidationError('Los participantes no pueden compartir documento.')
+        return participants
+
+    @transaction.atomic
+    def create(self, validated_data):
+        plan = Plan.objects.select_for_update().get(pk=validated_data['plan'].pk)
+        if not plan.activo or not plan.es_pareja:
+            raise serializers.ValidationError({'plan_id': 'El plan de pareja ya no está disponible.'})
+        participants = validated_data['participantes']
+        ids = sorted(p['member'].id for p in participants if 'member' in p)
+        members = {member.id: member for member in Member.objects.select_for_update().filter(pk__in=ids).order_by('pk')}
+        if len(members) != len(ids) or any(member.archivado for member in members.values()):
+            raise serializers.ValidationError({'participantes': 'Uno de los miembros ya no está disponible.'})
+        start = validated_data['fecha_inicio']
+        today = timezone.localdate()
+        latest = Membership.objects.operativas().filter(
+            member_id__in=ids, fecha_fin__gte=today,
+        ).order_by('-fecha_fin').first()
+        if latest and start <= latest.fecha_fin:
+            raise serializers.ValidationError({
+                'fecha_inicio': f'La fecha debe ser posterior al {latest.fecha_fin.isoformat()}.',
+            })
+        try:
+            start + timedelta(days=plan.duracion_dias - 1)
+        except OverflowError:
+            raise serializers.ValidationError({'fecha_inicio': 'La fecha final excede el límite permitido.'})
+        group = uuid4()
+        payments = []
+        for participant in participants:
+            if 'member' in participant:
+                member = members[participant['member'].id]
+            else:
+                data = participant['nuevo_miembro'].copy()
+                data.pop('acepta_datos')
+                member = Member.objects.create(acepta_datos_en=timezone.now(), **data)
+            payments.append(registrar_pago(
+                member, plan, participant['metodo'], referencia=participant.get('referencia', ''),
+                usuario=self.context['request'].user, fecha_inicio=start, grupo_pareja=group,
+            ))
+        return payments
+
+
+class PairRegistrationView(generics.CreateAPIView):
+    serializer_class = PairRegistrationSerializer
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        payments = serializer.save()
+        return Response({
+            'grupo_pareja': str(payments[0].membership.grupo_pareja),
+            'pagos': [{'id': p.id, 'member_id': p.member_id, 'membership_id': p.membership_id,
+                       'monto_cop': p.monto_cop} for p in payments],
+        }, status=status.HTTP_201_CREATED)
 
 
 class PaymentSerializer(serializers.ModelSerializer):
@@ -442,6 +564,8 @@ class PaymentSerializer(serializers.ModelSerializer):
     congelada = serializers.BooleanField(source='membership.congelada', read_only=True)
     membresia_vigente = serializers.SerializerMethodField()
     member_archivado = serializers.BooleanField(source='member.archivado', read_only=True)
+    es_pareja = serializers.BooleanField(source='membership.es_pareja', read_only=True)
+    grupo_pareja = serializers.UUIDField(source='membership.grupo_pareja', read_only=True, allow_null=True)
     registrado_por_nombre = serializers.SerializerMethodField()
     metodo_display = serializers.CharField(source='get_metodo_display', read_only=True)
 
@@ -462,6 +586,8 @@ class PaymentSerializer(serializers.ModelSerializer):
             'congelada',
             'membresia_vigente',
             'member_archivado',
+            'es_pareja',
+            'grupo_pareja',
             'monto_cop',
             'metodo',
             'metodo_display',
@@ -534,7 +660,9 @@ class PaymentVoidView(APIView):
     @transaction.atomic
     def post(self, request, pk):
         payment = get_object_or_404(Payment, pk=pk)
-        get_object_or_404(Membership.objects.select_for_update(), pk=payment.membership_id)
+        membership = get_object_or_404(Membership.objects.select_for_update(), pk=payment.membership_id)
+        if membership.es_pareja:
+            raise serializers.ValidationError({'detail': 'No se pueden anular pagos de planes de pareja.'})
         payment = get_object_or_404(Payment.objects.select_for_update(), pk=pk)
         payment.anulado = True
         payment.save(update_fields=['anulado'])
@@ -593,6 +721,8 @@ class MembershipStartDateView(APIView):
         if not request.user.is_superuser:
             queryset = queryset.filter(member__archivado=False)
         membership = get_object_or_404(queryset, pk=pk)
+        if membership.es_pareja:
+            raise serializers.ValidationError({'detail': 'No se puede corregir el inicio de una membresía de pareja.'})
         serializer = MembershipStartDateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         start_date = serializer.validated_data['fecha_inicio']
