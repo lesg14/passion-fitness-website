@@ -1822,7 +1822,8 @@ function VoidPaymentConfirmDialog({ payment, onClose, onSuccess }) {
           <div>
             <strong>¿Confirmas anular el pago de {formatCurrency(payment.monto_cop)}?</strong>
             <span>
-              Miembro: {payment.member_nombre}. El pago se registrará como "Anulado" para auditoría y se excluirá de los reportes contables de ingresos.
+              Miembro: {payment.member_nombre}. El pago se conservará para auditoría y se excluirá de los ingresos.
+              Su membresía quedará inactiva; las renovaciones posteriores conservarán sus fechas.
             </span>
           </div>
         </div>
@@ -2267,7 +2268,7 @@ function PaymentHistoryView({
                                 Corregir inicio
                               </button>
                             )}
-                            {isAdmin && payment.membresia_vigente && !payment.congelada && (
+                            {isAdmin && !payment.anulado && payment.membresia_vigente && !payment.congelada && (
                               <button className="action-btn" type="button"
                                 onClick={() => setMembershipChange({ payment, action: 'freeze' })}>
                                 Congelar
@@ -2312,6 +2313,7 @@ function PaymentHistoryView({
           onSuccess={(msg) => {
             showToast(msg);
             loadPayments(selectedMemberId);
+            onRefreshData();
           }}
         />
       )}
