@@ -640,7 +640,7 @@ function RenewPaymentDialog({ member, plans, members, onClose, onSuccess }) {
 
   return (
     <div className="dialog-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <section className="dialog" role="dialog" aria-modal="true" aria-labelledby="renew-title">
+      <section className="dialog renew-dialog" role="dialog" aria-modal="true" aria-labelledby="renew-title">
         <div className="dialog-heading">
           <div>
             <span className="eyebrow">RENOVAR / COBRAR</span>
@@ -2630,6 +2630,12 @@ export default function App() {
     };
   }, [members, query, statusFilter]);
 
+  const expiringMembers = useMemo(() => (
+    members
+      .filter((member) => !member.archivado && ['Vence hoy', 'Vence mañana', 'Vence en 2 días', 'Vence en 3 días'].includes(member.estado))
+      .sort((a, b) => a.fecha_fin.localeCompare(b.fecha_fin) || a.nombre.localeCompare(b.nombre, 'es'))
+  ), [members]);
+
   if (authLoading) return <main className="loading-screen">Conectando con Passion Fitness…</main>;
   if (!user) return <LoginScreen onLogin={handleLogin} connectionError={connectionError} />;
 
@@ -2799,7 +2805,7 @@ export default function App() {
         </header>
 
         {activeTab === 'staff' && isAdmin ? (
-          <StaffManagement showToast={showToast} />
+          <StaffManagement showToast={showToast} onProfileChanged={(profile) => setUser((current) => ({ ...current, username: profile.username, first_name: profile.first_name }))} />
         ) : activeTab === 'plans' ? (
           <PlansManagementView
             onBackToDashboard={() => setActiveTab('dashboard')}
@@ -2835,7 +2841,7 @@ export default function App() {
               <div>
                 <p className="eyebrow">PANEL DEL CLUB · {isAdmin ? 'MODO TOTAL' : 'MODO OPERATIVO'}</p>
                 <h1>
-                  Tu club, en movimiento<span>.</span>
+                  ¡Te damos la bienvenida, {user.first_name || user.user?.first_name || user.username}<span>!</span>
                 </h1>
                 <p className="page-subtitle">
                   {isAdmin
@@ -2864,7 +2870,7 @@ export default function App() {
               </div>
             )}
 
-            <section className="metrics-grid" aria-label="Indicadores del club">
+            <section className={`metrics-grid${isAdmin ? '' : ' metrics-grid-reception'}`} aria-label="Indicadores del club">
               <Metric
                 icon={Users}
                 label="Miembros registrados"
@@ -2879,13 +2885,15 @@ export default function App() {
                 caption="Vence hoy, mañana o en ≤3d"
                 tone="orange"
               />
-              <Metric
-                icon={CreditCard}
-                label="Ingresos del mes"
-                value={metrics ? formatCompactCurrency(metrics.ingresos_mes) : '—'}
-                caption="Pagos no anulados · COP"
-                tone="blue"
-              />
+              {isAdmin && (
+                <Metric
+                  icon={CreditCard}
+                  label="Ingresos del mes"
+                  value={metrics ? formatCompactCurrency(metrics.ingresos_mes) : '—'}
+                  caption="Pagos no anulados · COP"
+                  tone="blue"
+                />
+              )}
               <Metric
                 icon={Activity}
                 label="Miembros activos"
@@ -2895,8 +2903,9 @@ export default function App() {
               />
             </section>
 
-            <section className="overview-grid" id="ingresos">
-              <article className="panel revenue-panel">
+            <section className="overview-grid">
+              {isAdmin ? (
+              <article className="panel revenue-panel" id="ingresos">
                 <div className="panel-heading">
                   <div>
                     <p className="eyebrow">RENDIMIENTO</p>
@@ -2921,6 +2930,44 @@ export default function App() {
                   </Suspense>
                 </div>
               </article>
+              ) : (
+                <article className="panel expiring-panel" aria-labelledby="expiring-title">
+                  <div className="panel-heading">
+                    <div>
+                      <p className="eyebrow">SEGUIMIENTO</p>
+                      <h2 id="expiring-title">Membresías por vencer</h2>
+                    </div>
+                    <CalendarDays size={19} aria-hidden="true" />
+                  </div>
+                  <p className="expiring-description">Miembros que vencen hoy o en los próximos 3 días y no tienen otra membresía operativa con vencimiento posterior.</p>
+                  {dataError ? (
+                    <p className="expiring-empty">No se pudieron cargar los vencimientos. Usa la opción de reintentar.</p>
+                  ) : !dashboard ? (
+                    <p className="expiring-empty">Cargando vencimientos…</p>
+                  ) : expiringMembers.length ? (
+                    <ul className="expiring-list">
+                      {expiringMembers.map((member) => (
+                        <li className="expiring-item" key={member.id}>
+                          <div>
+                            <strong>{member.nombre}</strong>
+                            <span>{member.tipo_documento} {member.numero_documento} · {member.estado} ({formatDate(member.fecha_fin)})</span>
+                          </div>
+                          <button
+                            className="action-btn action-renew"
+                            type="button"
+                            aria-label={`Renovar membresía de ${member.nombre}, documento ${member.numero_documento}`}
+                            onClick={() => setSelectedMemberForRenewal(member)}
+                          >
+                            Renovar
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="expiring-empty">No hay membresías por vencer en los próximos 3 días.</p>
+                  )}
+                </article>
+              )}
 
               <article className="panel pulse-panel" id="planes">
                 <div className="panel-heading">

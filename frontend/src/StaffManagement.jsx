@@ -2,10 +2,13 @@ import { useEffect, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { apiRequest } from './api.js';
 
-const emptyForm = { username: '', first_name: '', last_name: '', email: '', password: '', confirm: '' };
+const emptyForm = { username: '', first_name: '', last_name: '', email: '', current_password: '', password: '', confirm: '' };
 
-export default function StaffManagement({ showToast }) {
+export default function StaffManagement({ showToast, onProfileChanged }) {
   const [staff, setStaff] = useState([]);
+  const [profile, setProfile] = useState(null);
+  const [profileError, setProfileError] = useState('');
+  const [profileLoading, setProfileLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [form, setForm] = useState(null);
@@ -26,34 +29,52 @@ export default function StaffManagement({ showToast }) {
     }
   }
 
-  useEffect(() => { loadStaff(); }, []);
+  async function loadProfile() {
+    setProfileLoading(true);
+    setProfileError('');
+    try {
+      setProfile(await apiRequest('/auth/admin-profile/'));
+    } catch (err) {
+      setProfileError(err.message);
+    } finally {
+      setProfileLoading(false);
+    }
+  }
+
+  useEffect(() => { loadStaff(); loadProfile(); }, []);
 
   function openForm(nextMode, person = null, username = '') {
     setMode(nextMode);
     setTarget(person);
-    setForm({ ...emptyForm, ...(person || {}), username: person?.username || username, password: '', confirm: '' });
+    setForm({ ...emptyForm, ...(person || {}), username: person?.username || username, current_password: '', password: '', confirm: '' });
     setFormError('');
   }
 
   async function submit(event) {
     event.preventDefault();
     setFormError('');
-    if ((mode === 'create' || mode === 'password') && form.password !== form.confirm) {
+    if (['create', 'password', 'profile-password'].includes(mode) && form.password !== form.confirm) {
       setFormError('Las contraseñas no coinciden.');
       return;
     }
-    const body = mode === 'password'
-      ? { password: form.password }
+    const isProfile = mode === 'profile' || mode === 'profile-password';
+    const body = mode === 'password' || mode === 'profile-password'
+      ? { password: form.password, ...(mode === 'profile-password' ? { current_password: form.current_password } : {}) }
       : { username: form.username.trim(), first_name: form.first_name.trim(), last_name: form.last_name.trim(), email: form.email.trim(), ...(mode === 'create' ? { password: form.password } : {}) };
     setBusy(true);
     try {
-      await apiRequest(mode === 'create' ? '/staff/' : `/staff/${target.id}/`, {
+      const updated = await apiRequest(isProfile ? '/auth/admin-profile/' : mode === 'create' ? '/staff/' : `/staff/${target.id}/`, {
         method: mode === 'create' ? 'POST' : 'PATCH',
         body,
       });
       setForm(null);
-      showToast(mode === 'password' ? 'Contraseña actualizada.' : mode === 'create' ? 'Recepcionista creado.' : 'Datos actualizados.');
-      await loadStaff();
+      showToast(mode === 'password' || mode === 'profile-password' ? 'Contraseña actualizada.' : mode === 'create' ? 'Recepcionista creado.' : 'Datos actualizados.');
+      if (isProfile) {
+        setProfile(updated);
+        onProfileChanged(updated);
+      } else {
+        await loadStaff();
+      }
     } catch (err) {
       setFormError(err.message);
     } finally {
@@ -86,9 +107,25 @@ export default function StaffManagement({ showToast }) {
         <div>
           <p className="eyebrow">ADMINISTRACIÓN</p>
           <h1>Personal<span>.</span></h1>
-          <p className="page-subtitle">Gestiona las cuentas de recepción y su acceso al sistema.</p>
+          <p className="page-subtitle">Edita tu cuenta y gestiona el acceso del personal de recepción.</p>
         </div>
         <button className="button button-primary" type="button" onClick={() => openForm('create')}><Plus size={17} /> Crear recepcionista</button>
+      </section>
+      <section className="panel members-panel staff-profile" aria-label="Mi cuenta de administrador">
+        <div className="panel-heading members-heading">
+          <h2>Mi cuenta de administrador</h2>
+        </div>
+        {profileLoading ? <p>Cargando cuenta…</p> : profileError ? (
+          <div className="form-error" role="alert">{profileError} <button type="button" className="action-btn" onClick={loadProfile}>Reintentar</button></div>
+        ) : profile && (
+          <div className="staff-profile-details">
+            <div><strong>{`${profile.first_name} ${profile.last_name}`.trim() || 'Nombre sin registrar'}</strong><span>Usuario: {profile.username} · Correo: {profile.email || 'Sin registrar'}</span></div>
+            <div className="staff-actions">
+              <button className="action-btn" type="button" onClick={() => openForm('profile', profile)}>Editar mi cuenta</button>
+              <button className="action-btn" type="button" onClick={() => openForm('profile-password', profile)}>Cambiar mi contraseña</button>
+            </div>
+          </div>
+        )}
       </section>
       {error && <div className="api-notice" role="alert">{error}<button type="button" onClick={loadStaff}>Reintentar</button></div>}
       {!loading && !error && suggested.length > 0 && (
@@ -126,15 +163,18 @@ export default function StaffManagement({ showToast }) {
       {form && (
         <div className="dialog-backdrop">
           <div className="dialog" role="dialog" aria-modal="true" aria-labelledby="staff-dialog-title">
-            <div className="dialog-heading"><h2 id="staff-dialog-title">{mode === 'create' ? 'Crear recepcionista' : mode === 'edit' ? 'Editar recepcionista' : `Contraseña de ${target.username}`}</h2></div>
+            <div className="dialog-heading"><h2 id="staff-dialog-title">{mode === 'create' ? 'Crear recepcionista' : mode === 'edit' ? 'Editar recepcionista' : mode === 'profile' ? 'Editar mi cuenta' : mode === 'profile-password' ? 'Cambiar mi contraseña' : `Contraseña de ${target.username}`}</h2></div>
             <form className="member-form" onSubmit={submit}>
-              {mode !== 'password' && <>
+              {mode !== 'password' && mode !== 'profile-password' && <>
                 <label>Usuario<input required maxLength={150} autoComplete="off" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} /></label>
                 <label>Nombres<input maxLength={150} value={form.first_name} onChange={(e) => setForm({ ...form, first_name: e.target.value })} /></label>
                 <label>Apellidos<input maxLength={150} value={form.last_name} onChange={(e) => setForm({ ...form, last_name: e.target.value })} /></label>
                 <label>Correo electrónico (opcional)<input type="email" maxLength={254} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></label>
               </>}
-              {mode !== 'edit' && <>
+              {mode === 'profile-password' && (
+                <label>Contraseña actual<input type="password" required autoComplete="current-password" value={form.current_password} onChange={(e) => setForm({ ...form, current_password: e.target.value })} /></label>
+              )}
+              {['create', 'password', 'profile-password'].includes(mode) && <>
                 <label>Contraseña<input type="password" required autoComplete="new-password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></label>
                 <label>Confirmar contraseña<input type="password" required autoComplete="new-password" value={form.confirm} onChange={(e) => setForm({ ...form, confirm: e.target.value })} /></label>
                 <p className="staff-password-note">Usa al menos 8 caracteres; evita contraseñas comunes, totalmente numéricas o parecidas a los datos del usuario.</p>
