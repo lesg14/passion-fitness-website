@@ -16,6 +16,7 @@ from rest_framework.views import APIView
 from apps.billing.models import Membership, Payment, registrar_pago
 from apps.dashboard.views import calcular_estadisticas
 from apps.members.models import Member
+from apps.members.validators import validate_birth_date, validate_ten_digits
 from apps.plans.models import Plan
 
 
@@ -187,6 +188,7 @@ class MemberSerializer(serializers.ModelSerializer):
             'numero_documento',
             'telefono',
             'email',
+            'fecha_nacimiento',
             'plan',
             'plan_id',
             'fecha_fin',
@@ -264,13 +266,30 @@ class MemberSerializer(serializers.ModelSerializer):
         return ''.join(part[0] for part in (obj.nombres, obj.apellidos) if part).upper()[:2]
 
 
-class MemberRegistrationSerializer(serializers.Serializer):
+class MemberValidationFieldsMixin:
+    def validate_numero_documento(self, value):
+        validate_ten_digits(value)
+        return value
+
+    def validate_telefono(self, value):
+        if value:
+            validate_ten_digits(value)
+        return value
+
+    def validate_fecha_nacimiento(self, value):
+        if value is not None:
+            validate_birth_date(value)
+        return value
+
+
+class MemberRegistrationSerializer(MemberValidationFieldsMixin, serializers.Serializer):
     nombres = serializers.CharField(max_length=100)
     apellidos = serializers.CharField(max_length=100)
     tipo_documento = serializers.ChoiceField(choices=Member.TipoDocumento.choices)
-    numero_documento = serializers.CharField(max_length=20)
-    telefono = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    numero_documento = serializers.CharField(max_length=20, trim_whitespace=False)
+    telefono = serializers.CharField(max_length=20, required=False, allow_blank=True, trim_whitespace=False)
     email = serializers.EmailField(required=False, allow_blank=True)
+    fecha_nacimiento = serializers.DateField(required=False, allow_null=True)
     fecha_inicio = serializers.DateField(required=False, allow_null=True)
     acepta_datos = serializers.BooleanField(write_only=True)
     plan_id = serializers.PrimaryKeyRelatedField(source='plan', queryset=Plan.objects.filter(activo=True))
@@ -307,10 +326,13 @@ class MemberRegistrationSerializer(serializers.Serializer):
         return member
 
 
-class MemberUpdateSerializer(serializers.ModelSerializer):
+class MemberUpdateSerializer(MemberValidationFieldsMixin, serializers.ModelSerializer):
+    numero_documento = serializers.CharField(max_length=20, trim_whitespace=False)
+    telefono = serializers.CharField(max_length=20, required=False, allow_blank=True, trim_whitespace=False)
+
     class Meta:
         model = Member
-        fields = ('id', 'nombres', 'apellidos', 'tipo_documento', 'numero_documento', 'telefono', 'email', 'archivado')
+        fields = ('id', 'nombres', 'apellidos', 'tipo_documento', 'numero_documento', 'telefono', 'email', 'fecha_nacimiento', 'archivado')
 
     def validate(self, attrs):
         tipo = attrs.get('tipo_documento', self.instance.tipo_documento if self.instance else None)

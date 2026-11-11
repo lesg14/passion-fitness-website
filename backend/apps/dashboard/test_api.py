@@ -1,5 +1,5 @@
 ﻿import json
-from datetime import timedelta
+from datetime import date, timedelta
 
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
@@ -21,7 +21,7 @@ class DashboardApiTests(TestCase):
         )
         self.plan = Plan.objects.create(nombre='Mensual', precio_cop=80000, duracion_dias=30)
         self.member = Member.objects.create(
-            nombres='Ana', apellidos='Gómez', numero_documento='12345'
+            nombres='Ana', apellidos='Gómez', numero_documento='1234567890'
         )
 
     def csrf_token(self, client=None):
@@ -52,7 +52,7 @@ class DashboardApiTests(TestCase):
                 'nombres': 'Luis',
                 'apellidos': 'Pérez',
                 'tipo_documento': 'CC',
-                'numero_documento': '67890',
+                'numero_documento': '0678901234',
                 'email': 'luis@example.com',
                 'acepta_datos': True,
                 'plan_id': self.plan.id,
@@ -76,7 +76,7 @@ class DashboardApiTests(TestCase):
             'nombres': 'Ana',
             'apellidos': 'Otra',
             'tipo_documento': 'CC',
-            'numero_documento': '12345',
+            'numero_documento': '1234567890',
             'acepta_datos': False,
             'plan_id': self.plan.id,
             'metodo': 'efectivo',
@@ -91,6 +91,155 @@ class DashboardApiTests(TestCase):
         self.assertEqual(Member.objects.count(), 1)
         self.assertEqual(Membership.objects.count(), 0)
         self.assertEqual(Payment.objects.count(), 0)
+
+    def test_registration_stores_optional_birth_date_without_linking_a_user(self):
+        self.client.force_login(self.staff)
+        payload = {
+            'nombres': 'Luis', 'apellidos': 'Pérez',
+            'tipo_documento': 'CC', 'numero_documento': '0678901234',
+            'fecha_nacimiento': '1995-03-20',
+            'acepta_datos': True, 'plan_id': self.plan.id, 'metodo': 'nequi',
+        }
+        response = self.client.post('/api/members/', data=json.dumps(payload), content_type='application/json')
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual(response.json()['fecha_nacimiento'], '1995-03-20')
+        member = Member.objects.get(pk=response.json()['id'])
+        self.assertEqual(member.fecha_nacimiento, date(1995, 3, 20))
+        self.assertIsNone(member.user_id)
+        listed = next(item for item in self.client.get('/api/members/').json() if item['id'] == member.id)
+        self.assertEqual(listed['fecha_nacimiento'], '1995-03-20')
+
+    def test_optional_birth_date_and_invalid_birth_date_on_registration(self):
+        self.client.force_login(self.staff)
+        payload = {
+            'nombres': 'Luis', 'apellidos': 'Pérez',
+            'tipo_documento': 'CC', 'numero_documento': '0678901234',
+            'acepta_datos': True, 'plan_id': self.plan.id, 'metodo': 'nequi',
+        }
+        payload['fecha_nacimiento'] = '2024-02-30'
+        response = self.client.post('/api/members/', data=json.dumps(payload), content_type='application/json')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('fecha_nacimiento', response.json())
+        self.assertEqual(Payment.objects.count(), 0)
+        del payload['fecha_nacimiento']
+        response = self.client.post('/api/members/', data=json.dumps(payload), content_type='application/json')
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertIsNone(response.json()['fecha_nacimiento'])
+        self.assertIsNone(Member.objects.get(pk=response.json()['id']).fecha_nacimiento)
+
+    def test_update_and_clear_birth_date_without_changing_payments(self):
+        self.client.force_login(self.staff)
+        url = f'/api/members/{self.member.id}/'
+        for value in ('1988-04-25', None):
+            response = self.client.patch(
+                url, data=json.dumps({'fecha_nacimiento': value}), content_type='application/json',
+            )
+            self.assertEqual(response.status_code, 200, response.content)
+            self.assertEqual(response.json()['fecha_nacimiento'], value)
+            self.member.refresh_from_db()
+            self.assertEqual(
+                self.member.fecha_nacimiento,
+                date(1988, 4, 25) if value else None,
+            )
+        response = self.client.patch(
+            url, data=json.dumps({'fecha_nacimiento': 'fecha inválida'}), content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('fecha_nacimiento', response.json())
+        self.assertEqual(Payment.objects.count(), 0)
+
+    def test_registration_validates_identification_phone_and_birth_date(self):
+        self.client.force_login(self.staff)
+        payload = {
+            'nombres': 'Luis', 'apellidos': 'Pérez', 'tipo_documento': 'CC',
+            'numero_documento': '0123456789', 'telefono': '3001234567',
+            'acepta_datos': True, 'plan_id': self.plan.id, 'metodo': 'nequi',
+            'fecha_nacimiento': self.hoy.isoformat(),
+        }
+        cases = [
+            ('numero_documento', '123456789'),
+            ('numero_documento', '12345678901'),
+            ('numero_documento', '123456789a'),
+            ('numero_documento', '12345-7890'),
+            ('numero_documento', ' 123456789'),
+            ('numero_documento', '١٢٣٤٥٦٧٨٩٠'),
+            ('telefono', '123456789'),
+            ('telefono', '12345678901'),
+            ('telefono', '300123456a'),
+            ('telefono', '300-234567'),
+            ('telefono', '300123456 '),
+            ('fecha_nacimiento', (self.hoy + timedelta(days=1)).isoformat()),
+        ]
+        for field, value in cases:
+            with self.subTest(field=field, value=value):
+                response = self.client.post(
+                    '/api/members/', data=json.dumps({**payload, field: value}), content_type='application/json',
+                )
+                self.assertEqual(response.status_code, 400, response.content)
+                self.assertIn(field, response.json())
+                self.assertEqual(Payment.objects.count(), 0)
+        response = self.client.post('/api/members/', data=json.dumps(payload), content_type='application/json')
+        self.assertEqual(response.status_code, 201, response.content)
+        member = Member.objects.get(pk=response.json()['id'])
+        self.assertEqual(member.numero_documento, '0123456789')
+        self.assertEqual(member.telefono, '3001234567')
+        self.assertEqual(member.fecha_nacimiento, self.hoy)
+
+    def test_member_update_validates_only_submitted_fields(self):
+        self.client.force_login(self.staff)
+        url = f'/api/members/{self.member.id}/'
+        for field, value in (
+            ('numero_documento', '123abc7890'),
+            ('telefono', '123'),
+            ('fecha_nacimiento', (self.hoy + timedelta(days=1)).isoformat()),
+        ):
+            with self.subTest(field=field):
+                response = self.client.patch(url, data=json.dumps({field: value}), content_type='application/json')
+                self.assertEqual(response.status_code, 400, response.content)
+                self.assertIn(field, response.json())
+        response = self.client.patch(
+            url, data=json.dumps({'telefono': '', 'fecha_nacimiento': None}), content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.member.refresh_from_db()
+        self.assertEqual(self.member.numero_documento, '1234567890')
+        self.assertEqual(self.member.telefono, '')
+        self.assertIsNone(self.member.fecha_nacimiento)
+
+    def test_registration_and_update_validate_optional_email(self):
+        self.client.force_login(self.staff)
+        payload = {
+            'nombres': 'Luis', 'apellidos': 'Pérez', 'tipo_documento': 'CC',
+            'numero_documento': '0123456789', 'acepta_datos': True,
+            'plan_id': self.plan.id, 'metodo': 'nequi',
+        }
+        url = f'/api/members/{self.member.id}/'
+        for value in ('correo-sin-arroba', 'nombre@', '@ejemplo.com', 'nombre@ejemplo'):
+            with self.subTest(email=value):
+                response = self.client.post(
+                    '/api/members/', data=json.dumps({**payload, 'email': value}), content_type='application/json',
+                )
+                self.assertEqual(response.status_code, 400, response.content)
+                self.assertIn('email', response.json())
+                response = self.client.patch(
+                    url, data=json.dumps({'email': value}), content_type='application/json',
+                )
+                self.assertEqual(response.status_code, 400, response.content)
+                self.assertIn('email', response.json())
+        self.assertEqual(Payment.objects.count(), 0)
+        response = self.client.post(
+            '/api/members/', data=json.dumps({**payload, 'email': 'luis@example.com'}),
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual(Member.objects.get(pk=response.json()['id']).email, 'luis@example.com')
+        for email in ('ana@example.com', ''):
+            response = self.client.patch(
+                url, data=json.dumps({'email': email}), content_type='application/json',
+            )
+            self.assertEqual(response.status_code, 200, response.content)
+            self.member.refresh_from_db()
+            self.assertEqual(self.member.email, email)
 
     def test_payment_endpoint_renews_membership_and_records_staff(self):
         first_payment = registrar_pago(self.member, self.plan, 'efectivo')
