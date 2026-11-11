@@ -116,7 +116,7 @@ Todos los endpoints requieren sesión autenticada (`is_staff`). Las operaciones 
 | `PATCH` | `/api/members/<id>/` | Admin | Archivar (`archivado: true`) o restaurar (`archivado: false`) un miembro |
 | `GET` | `/api/payments/?member_id=<id>` | Staff/Admin | Consultar historial de pagos; `search` acepta nombre, documento, plan o referencia |
 | `POST` | `/api/payments/` | Staff/Admin | Registrar pago y renovar membresía a un miembro existente |
-| `POST` | `/api/payments/<id>/void/` | Admin | Marcar el pago como anulado y excluirlo de ingresos; no cambia las fechas de membresía |
+| `POST` | `/api/payments/<id>/void/` | Admin | Anular el pago, excluirlo de ingresos e inactivar su membresía conservando sus fechas |
 | `POST` | `/api/memberships/<id>/freeze/` | Admin | Añadir 5 días a una membresía vigente, una sola vez |
 | `PATCH` | `/api/memberships/<id>/start-date/` | Staff/Admin | Corregir `fecha_inicio`, desplazando `fecha_fin` para conservar la duración |
 
@@ -126,7 +126,9 @@ El correo electrónico es opcional y, si se proporciona, debe tener un formato v
 
 El campo `user_id` vincula opcionalmente al miembro con una cuenta de Django para un posible portal de clientes; el registro actual no crea ni vincula esa cuenta.
 
-En **Historial de Pagos**, cada registro permite corregir el inicio de su membresía; el administrador también puede congelarla si está vigente y no se ha congelado antes. La corrección conserva los cinco días adicionales si ya se aplicaron. Ninguna de estas operaciones crea pagos ni modifica los ingresos u otras membresías; revisa posibles solapamientos con renovaciones existentes.
+En **Historial de Pagos**, cada registro permite corregir el inicio de su membresía; el administrador también puede congelarla si está vigente, no se ha congelado antes y no tiene pagos anulados. La corrección conserva los cinco días adicionales si ya se aplicaron. Ninguna de estas operaciones crea pagos ni modifica los ingresos u otras membresías; revisa posibles solapamientos con renovaciones existentes.
+
+Anular un pago impide que su membresía se considere activa, incluso si el pago se anuló anteriormente. Se conservan el pago, la membresía y sus fechas para auditoría; las renovaciones posteriores existentes no se desplazan. Las nuevas renovaciones automáticas ignoran las membresías con pagos anulados.
 
 Para activar la nueva funcionalidad en una base existente, aplica las migraciones:
 
