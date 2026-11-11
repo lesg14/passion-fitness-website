@@ -2,7 +2,7 @@
 from collections.abc import Mapping
 from uuid import uuid4
 
-from django.contrib.auth import authenticate, get_user_model, login, logout
+from django.contrib.auth import authenticate, get_user_model, login, logout, update_session_auth_hash
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
@@ -114,6 +114,48 @@ class ReceptionistDetailView(generics.RetrieveUpdateAPIView):
         return get_user_model().objects.filter(is_staff=True, is_superuser=False)
 
 
+class AdminProfileSerializer(ReceptionistSerializer):
+    current_password = serializers.CharField(write_only=True, required=False, trim_whitespace=False, style={'input_type': 'password'})
+
+    class Meta(ReceptionistSerializer.Meta):
+        fields = ('id', 'username', 'first_name', 'last_name', 'email', 'password', 'current_password')
+
+    def to_internal_value(self, data):
+        if isinstance(data, Mapping) and 'id' in data:
+            raise serializers.ValidationError({'id': 'Este campo no se puede modificar.'})
+        return super().to_internal_value(data)
+
+    def validate_username(self, value):
+        return value if value == self.instance.username else super().validate_username(value)
+
+    def validate_email(self, value):
+        return value if value == self.instance.email else super().validate_email(value)
+
+    def validate(self, attrs):
+        current_password = attrs.pop('current_password', None)
+        if 'password' in attrs:
+            if not current_password or not self.instance.check_password(current_password):
+                raise serializers.ValidationError({'current_password': 'La contraseña actual es incorrecta.'})
+        elif current_password is not None:
+            raise serializers.ValidationError({'password': 'Indica la nueva contraseña.'})
+        return super().validate(attrs)
+
+
+class AdminProfileView(generics.RetrieveUpdateAPIView):
+    permission_classes = [IsAdminRole]
+    serializer_class = AdminProfileSerializer
+    http_method_names = ['get', 'patch', 'head', 'options']
+
+    def get_object(self):
+        return self.request.user
+
+    def perform_update(self, serializer):
+        password_changed = 'password' in serializer.validated_data
+        user = serializer.save()
+        if password_changed:
+            update_session_auth_hash(self.request, user)
+
+
 class CsrfView(APIView):
     authentication_classes = []
     permission_classes = [AllowAny]
@@ -159,6 +201,7 @@ class LoginView(APIView):
         new_csrf = get_token(request)
         return Response({
             'username': user.get_username(),
+            'first_name': user.first_name,
             'is_staff': user.is_staff,
             'is_superuser': user.is_superuser,
             'role': 'admin' if user.is_superuser else 'staff',
@@ -177,6 +220,7 @@ class SessionView(APIView):
             return Response({'detail': 'Se requiere una cuenta de staff o administrador.'}, status=status.HTTP_403_FORBIDDEN)
         return Response({
             'username': request.user.get_username(),
+            'first_name': request.user.first_name,
             'is_staff': request.user.is_staff,
             'is_superuser': request.user.is_superuser,
             'role': 'admin' if request.user.is_superuser else 'staff',

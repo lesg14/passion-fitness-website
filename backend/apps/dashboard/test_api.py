@@ -43,6 +43,37 @@ class DashboardApiTests(TestCase):
         self.assertEqual(response[0]['nombre'], 'Ana Gómez')
         self.assertEqual(response[0]['estado'], 'Sin membresía')
 
+    def test_expiring_member_states_match_dashboard_count(self):
+        cases = [
+            ('Hoy', 0), ('Manana', 1), ('Dos', 2), ('Tres', 3),
+            ('Cuatro', 4), ('Vencido', -1),
+        ]
+        for index, (name, days) in enumerate(cases, start=1):
+            member = Member.objects.create(nombres=name, apellidos='Prueba', numero_documento=f'{index:010}')
+            Membership.objects.create(
+                member=member, plan=self.plan,
+                fecha_inicio=self.hoy - timedelta(days=10),
+                fecha_fin=self.hoy + timedelta(days=days),
+            )
+        renewed = Member.objects.create(nombres='Renovado', apellidos='Prueba', numero_documento='0000000010')
+        Membership.objects.create(member=renewed, plan=self.plan, fecha_inicio=self.hoy - timedelta(days=2), fecha_fin=self.hoy)
+        Membership.objects.create(member=renewed, plan=self.plan, fecha_inicio=self.hoy + timedelta(days=1), fecha_fin=self.hoy + timedelta(days=30))
+        future = Member.objects.create(nombres='Futuro', apellidos='Prueba', numero_documento='0000000011')
+        Membership.objects.create(member=future, plan=self.plan, fecha_inicio=self.hoy + timedelta(days=1), fecha_fin=self.hoy + timedelta(days=3))
+        archived = Member.objects.create(nombres='Archivado', apellidos='Prueba', numero_documento='0000000012', archivado=True)
+        Membership.objects.create(member=archived, plan=self.plan, fecha_inicio=self.hoy, fecha_fin=self.hoy)
+        voided = Member.objects.create(nombres='Anulado', apellidos='Prueba', numero_documento='0000000013')
+        payment = registrar_pago(voided, self.plan, 'efectivo', fecha_inicio=self.hoy - timedelta(days=29))
+        payment.anulado = True
+        payment.save(update_fields=['anulado'])
+
+        self.client.force_login(self.staff)
+        members = self.client.get('/api/members/').json()
+        due_states = {'Vence hoy', 'Vence mañana', 'Vence en 2 días', 'Vence en 3 días'}
+        due = {member['nombres'] for member in members if member['estado'] in due_states}
+        self.assertEqual(due, {'Hoy', 'Manana', 'Dos', 'Tres'})
+        self.assertEqual(self.client.get('/api/dashboard/').json()['metrics']['por_vencer'], len(due))
+
     def test_registration_creates_member_membership_and_payment(self):
         self.client.force_login(self.staff)
         token = self.csrf_token()
@@ -501,6 +532,25 @@ class DashboardApiTests(TestCase):
             HTTP_X_CSRFTOKEN=self.csrf_token(client),
         )
         self.assertEqual(response.status_code, 400)
+
+    def test_login_and_session_return_registered_first_name(self):
+        self.staff.first_name = 'María Fernanda'
+        self.staff.save(update_fields=['first_name'])
+        client = Client(enforce_csrf_checks=True)
+        response = client.post(
+            '/api/auth/login/',
+            data=json.dumps({'username': 'manager', 'password': 'test-password', 'role': 'staff'}),
+            content_type='application/json',
+            HTTP_X_CSRFTOKEN=self.csrf_token(client),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['first_name'], 'María Fernanda')
+        self.assertEqual(client.get('/api/auth/session/').json()['first_name'], 'María Fernanda')
+        self.staff.first_name = ''
+        self.staff.save(update_fields=['first_name'])
+        session = client.get('/api/auth/session/').json()
+        self.assertEqual(session['first_name'], '')
+        self.assertEqual(session['username'], 'manager')
 
     def test_expiration_states_detailed(self):
         self.client.force_login(self.staff)

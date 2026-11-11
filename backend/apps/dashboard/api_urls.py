@@ -1,6 +1,7 @@
 from django.urls import path
 
 from .api import (
+    AdminProfileView,
     CsrfView,
     DashboardView,
     LoginView,
@@ -24,6 +25,7 @@ urlpatterns = [
     path('auth/login/', LoginView.as_view(), name='api-login'),
     path('auth/session/', SessionView.as_view(), name='api-session'),
     path('auth/logout/', LogoutView.as_view(), name='api-logout'),
+    path('auth/admin-profile/', AdminProfileView.as_view(), name='api-admin-profile'),
     path('dashboard/', DashboardView.as_view(), name='api-dashboard'),
     path('staff/', ReceptionistListCreateView.as_view(), name='api-staff'),
     path('staff/<int:pk>/', ReceptionistDetailView.as_view(), name='api-staff-detail'),
