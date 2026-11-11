@@ -411,6 +411,23 @@ h1 span { color: var(--brand); }
 .plan-track { background: #2c2c2c; }
 .plan-track i { background: var(--brand); }
 
+.plans-chart { margin-top: 12px; }
+.plans-chart-layout { display: grid; grid-template-columns: minmax(120px, 160px) minmax(0, 1fr); align-items: center; gap: 8px; }
+.plans-chart-graphic { position: relative; width: 100%; aspect-ratio: 1; }
+.plans-chart-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; }
+.plans-chart-center strong { color: #fff; font-size: 19px; line-height: 1.2; }
+.plans-chart-center span { color: #a3a39e; font-size: 10px; }
+.plans-chart-legend { display: grid; gap: 3px; min-width: 0; }
+.plans-chart-legend-item { display: flex; align-items: center; gap: 7px; width: 100%; min-height: 30px; padding: 4px 5px; border: 0; border-radius: 4px; color: #d8d8d3; background: transparent; text-align: left; font-size: 11px; cursor: pointer; }
+.plans-chart-legend-item:hover, .plans-chart-legend-item.selected { background: #ffffff14; }
+.plans-chart-legend-item:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
+.plans-chart-swatch { width: 9px; height: 9px; flex: 0 0 auto; border-radius: 50%; }
+.plans-chart-name { flex: 1; overflow-wrap: anywhere; }
+.plans-chart-legend-item strong { color: #fff; }
+.plans-chart-detail { min-height: 32px; margin-top: 4px; color: #d8d8d3; font-size: 11px; line-height: 1.5; }
+.plans-chart-detail strong { color: #fff; }
+.plans-chart-note { margin: 4px 0 0; color: #a3a39e; font-size: 10px; line-height: 1.5; }
+
 thead { background: #f4f4f1; }
 th { color: #8a8a85; }
 td { color: #55554f; border-bottom-color: #efefec; }

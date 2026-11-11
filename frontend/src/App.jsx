@@ -28,6 +28,7 @@ import { apiRequest } from './api.js';
 import brandLogo from './passion-fitness-logo.png';
 
 const RevenueChart = lazy(() => import('./RevenueChart.jsx'));
+const PlansChart = lazy(() => import('./PlansChart.jsx'));
 
 const formatCurrency = (value) =>
   new Intl.NumberFormat('es-CO', {
@@ -2915,22 +2916,9 @@ export default function App() {
                   </div>
                 </div>
                 {dashboard?.plans?.length ? (
-                  <div className="plan-list">
-                    {dashboard.plans.map((plan) => {
-                      const max = Math.max(...dashboard.plans.map((item) => item.memberships), 1);
-                      return (
-                        <div className="plan-item" key={plan.name}>
-                          <div className="plan-item-heading">
-                            <span>{plan.name}</span>
-                            <strong>{plan.memberships}</strong>
-                          </div>
-                          <div className="plan-track">
-                            <i style={{ width: `${Math.max((plan.memberships / max) * 100, 3)}%` }} />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  <Suspense fallback={null}>
+                    <PlansChart data={dashboard.plans} />
+                  </Suspense>
                 ) : (
                   <p className="empty-plans">Todavía no hay membresías registradas.</p>
                 )}
