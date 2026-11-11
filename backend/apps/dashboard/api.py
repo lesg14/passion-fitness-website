@@ -1,7 +1,10 @@
 ﻿from datetime import timedelta
+from collections.abc import Mapping
 from uuid import uuid4
 
 from django.contrib.auth import authenticate, get_user_model, login, logout
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.db.models import Exists, OuterRef, Prefetch, Q
 from django.middleware.csrf import get_token
@@ -26,6 +29,89 @@ class IsAdminRole(BasePermission):
 
     def has_permission(self, request, view):
         return bool(request.user and request.user.is_authenticated and request.user.is_superuser)
+
+
+class ReceptionistSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True, required=False, trim_whitespace=False, style={'input_type': 'password'})
+
+    class Meta:
+        model = get_user_model()
+        fields = ('id', 'username', 'first_name', 'last_name', 'email', 'is_active', 'password')
+        read_only_fields = ('id',)
+
+    def to_internal_value(self, data):
+        if not isinstance(data, Mapping):
+            return super().to_internal_value(data)
+        unknown = set(data) - set(self.fields)
+        if unknown:
+            raise serializers.ValidationError({field: 'Este campo no se puede modificar.' for field in sorted(unknown)})
+        return super().to_internal_value(data)
+
+    def validate_username(self, value):
+        if '@' in value:
+            raise serializers.ValidationError('El usuario no puede contener @; usa el correo por separado.')
+        users = get_user_model().objects.filter(username__iexact=value)
+        if self.instance:
+            users = users.exclude(pk=self.instance.pk)
+        if users.exists():
+            raise serializers.ValidationError('Este nombre de usuario ya está en uso.')
+        return value
+
+    def validate_email(self, value):
+        if value:
+            users = get_user_model().objects.filter(email__iexact=value)
+            if self.instance:
+                users = users.exclude(pk=self.instance.pk)
+            if users.exists():
+                raise serializers.ValidationError('Este correo ya está en uso.')
+        return value
+
+    def validate(self, attrs):
+        password = attrs.get('password')
+        if not self.instance and not password:
+            raise serializers.ValidationError({'password': 'Establece una contraseña para la cuenta.'})
+        if password:
+            user = get_user_model()(
+                username=attrs.get('username', self.instance.username if self.instance else ''),
+                first_name=attrs.get('first_name', self.instance.first_name if self.instance else ''),
+                last_name=attrs.get('last_name', self.instance.last_name if self.instance else ''),
+                email=attrs.get('email', self.instance.email if self.instance else ''),
+            )
+            try:
+                validate_password(password, user)
+            except DjangoValidationError as exc:
+                raise serializers.ValidationError({'password': exc.messages})
+        return attrs
+
+    def create(self, validated_data):
+        password = validated_data.pop('password')
+        return get_user_model().objects.create_user(password=password, is_staff=True, is_superuser=False, **validated_data)
+
+    def update(self, instance, validated_data):
+        password = validated_data.pop('password', None)
+        for field, value in validated_data.items():
+            setattr(instance, field, value)
+        if password is not None:
+            instance.set_password(password)
+        instance.save()
+        return instance
+
+
+class ReceptionistListCreateView(generics.ListCreateAPIView):
+    permission_classes = [IsAdminRole]
+    serializer_class = ReceptionistSerializer
+
+    def get_queryset(self):
+        return get_user_model().objects.filter(is_staff=True, is_superuser=False).order_by('username', 'pk')
+
+
+class ReceptionistDetailView(generics.RetrieveUpdateAPIView):
+    permission_classes = [IsAdminRole]
+    serializer_class = ReceptionistSerializer
+    http_method_names = ['get', 'patch', 'head', 'options']
+
+    def get_queryset(self):
+        return get_user_model().objects.filter(is_staff=True, is_superuser=False)
 
 
 class CsrfView(APIView):

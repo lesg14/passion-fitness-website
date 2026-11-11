@@ -14,6 +14,8 @@ from .api import (
     PairRegistrationView,
     PlanDetailView,
     PlanListCreateView,
+    ReceptionistDetailView,
+    ReceptionistListCreateView,
     SessionView,
 )
 
@@ -23,6 +25,8 @@ urlpatterns = [
     path('auth/session/', SessionView.as_view(), name='api-session'),
     path('auth/logout/', LogoutView.as_view(), name='api-logout'),
     path('dashboard/', DashboardView.as_view(), name='api-dashboard'),
+    path('staff/', ReceptionistListCreateView.as_view(), name='api-staff'),
+    path('staff/<int:pk>/', ReceptionistDetailView.as_view(), name='api-staff-detail'),
     path('plans/', PlanListCreateView.as_view(), name='api-plans'),
     path('plans/<int:pk>/', PlanDetailView.as_view(), name='api-plan-detail'),
     path('members/', MemberListCreateView.as_view(), name='api-members'),
