@@ -37,6 +37,7 @@ Oferta de membresía disponible.
 - `precio_cop`: Precio en pesos colombianos (entero positivo).
 - `duracion_dias`: Duración de la membresía en días (entero positivo).
 - `activo`: Booleano (predeterminado: `true`). Si es falso, el plan no se ofrece a nuevos miembros, pero las membresías existentes permanecen vigentes.
+- `es_pareja`: Identifica planes para dos personas, con precio por persona. No se puede cambiar el tipo de un plan con membresías.
 
 **Restricciones de negocio:**
 - El nombre del plan debe ser único.
@@ -57,6 +58,7 @@ Período de validez de una membresía para un miembro en un plan.
 - `fecha_inicio`: Fecha de inicio de vigencia.
 - `fecha_fin`: Fecha de fin de vigencia.
 - `congelada`: Indica si ya se aplicó la congelación de cinco días a esta membresía.
+- `es_pareja` identifica las membresías de pareja; `grupo_pareja` vincula las dos membresías de una inscripción nueva, sin asociación permanente de los miembros.
 
 **Restricciones de negocio:**
 - Toda membresía está vinculada a un pago; se crean juntas en una transacción atómica.
@@ -64,7 +66,7 @@ Período de validez de una membresía para un miembro en un plan.
 - Una membresía se considera vigente si `fecha_inicio <= hoy <= fecha_fin` y no tiene pagos anulados (zona horaria: `America/Bogota`).
 - La API crea una membresía con un pago y permite modificar sus fechas únicamente mediante las operaciones de congelación y corrección de inicio.
 - El administrador puede congelar una membresía vigente una sola vez; la congelación añade cinco días calendario a `fecha_fin`.
-- Recepción o administración pueden corregir `fecha_inicio`; `fecha_fin` se desplaza la misma cantidad de días, conservando la duración y la congelación ya aplicada.
+- Recepción o administración pueden corregir `fecha_inicio` de membresías individuales; `fecha_fin` se desplaza la misma cantidad de días, conservando la duración y la congelación ya aplicada. Las membresías de pareja no permiten esta corrección.
 - Estas operaciones no crean pagos ni modifican otras membresías; podrían producir solapamientos con renovaciones existentes.
 - El sistema permite múltiples membresías simultáneas para un miembro (aunque operativamente se usa la más reciente).
 
@@ -87,7 +89,8 @@ Registro de transacción financiera y su asociación con una membresía.
 **Restricciones de negocio:**
 - No se pueden eliminar pagos; se anulan con `anulado = true`.
 - Un pago anulado se excluye de reportes de ingresos y métricas.
-- La anulación inactiva la membresía asociada sin borrar ni modificar sus fechas; se aplica también a pagos anteriormente anulados.
+- Los pagos de pareja no pueden anularse. Los pagos de pareja ya anulados conservan su estado.
+- En los demás pagos, la anulación inactiva la membresía asociada sin borrar ni modificar sus fechas; se aplica también a pagos anteriormente anulados.
 - Las renovaciones ya registradas conservan sus fechas; las nuevas renovaciones automáticas ignoran membresías con pagos anulados.
 - El monto pagado puede diferir del precio del plan (descuentos, retrasos, etc.).
 - Cada pago crea exactamente una membresía en la misma transacción.
@@ -158,10 +161,14 @@ Operaciones permitidas:
 
 ## Operaciones Críticas
 
+### Registrar plan de pareja
+
+`POST /api/pair-registrations/` crea en una transacción dos membresías independientes y dos pagos, cada uno por el precio del plan y con su propio método. Se seleccionan dos miembros distintos no archivados o se registran nuevos con sus datos y consentimiento individuales. La fecha inicial es común y debe ser posterior a cualquier membresía operativa vigente o futura de cualquiera de los participantes. Las membresías pueden congelarse por separado; sus inicios no se corrigen y sus pagos no pueden anularse. Una inscripción posterior puede tener otros participantes.
+
 ### Congelar o corregir una membresía
 
 - `POST /api/memberships/<id>/freeze/`: administrador; solo para una membresía vigente y no congelada. Añade cinco días a la fecha final y registra `congelada = true`.
-- `PATCH /api/memberships/<id>/start-date/`: recepción o administrador; recibe `{"fecha_inicio": "AAAA-MM-DD"}` y desplaza la fecha final por la misma diferencia. Recepción no puede modificar membresías de miembros archivados.
+- `PATCH /api/memberships/<id>/start-date/`: recepción o administrador; solo para membresías individuales, recibe `{"fecha_inicio": "AAAA-MM-DD"}` y desplaza la fecha final por la misma diferencia. Recepción no puede modificar membresías de miembros archivados.
 - Ninguna operación crea ni altera pagos, importes o ingresos. Las demás membresías no se desplazan automáticamente; verificar posibles solapamientos.
 
 ### Registrar Miembro con Primera Membresía
@@ -249,7 +256,7 @@ Operaciones permitidas:
 **Endpoint:** `POST /api/payments/<id>/void/`
 
 **Efecto:**
-- Marca `Payment.anulado = true`.
+- Para pagos distintos de los de pareja, marca `Payment.anulado = true`.
 - La membresía deja de considerarse activa y no puede congelarse; se conservan sus fechas originales.
 - Las renovaciones posteriores ya registradas conservan sus fechas.
 - El pago se excluye de reportes de ingresos.
