@@ -12,7 +12,8 @@ def calcular_estadisticas(hoy=None):
     hoy = hoy or timezone.localdate()
     limite = hoy + timedelta(days=3)
     miembros_activos = Member.objects.filter(archivado=False)
-    vigentes = Membership.objects.filter(
+    operativas = Membership.objects.operativas()
+    vigentes = operativas.filter(
         member__archivado=False,
         fecha_inicio__lte=hoy,
         fecha_fin__gte=hoy,
@@ -21,7 +22,7 @@ def calcular_estadisticas(hoy=None):
     activos = vigentes.values("member").distinct().count()
     # Activos cuya membresía más larga termina en los próximos 3 días (hoy, mañana, en 2 días o en 3 días)
     por_vencer = (
-        Membership.objects.filter(
+        operativas.filter(
             member__archivado=False,
             member__in=vigentes.values("member"),
             fecha_fin__gte=hoy,
@@ -33,7 +34,7 @@ def calcular_estadisticas(hoy=None):
     )
     # Miembros con membresía futura (próxima a iniciar) que no tienen membresía activa hoy
     proximos = (
-        Membership.objects.filter(member__archivado=False, fecha_inicio__gt=hoy)
+        operativas.filter(member__archivado=False, fecha_inicio__gt=hoy)
         .exclude(member__in=vigentes.values("member"))
         .values("member")
         .distinct()
@@ -48,7 +49,7 @@ def calcular_estadisticas(hoy=None):
         .annotate(total=Sum("monto_cop"))
         .order_by("mes")
     )
-    planes = Membership.objects.values("plan__nombre").annotate(n=Count("id")).order_by("-n")[:5]
+    planes = operativas.values("plan__nombre").annotate(n=Count("id")).order_by("-n")[:5]
     metodos = pagos.values("metodo").annotate(total=Sum("monto_cop")).order_by("-total")
     return {
         "total": total,
@@ -65,5 +66,4 @@ def calcular_estadisticas(hoy=None):
         "metodos_labels": [m["metodo"] for m in metodos],
         "metodos_data": [m["total"] for m in metodos],
     }
-
 

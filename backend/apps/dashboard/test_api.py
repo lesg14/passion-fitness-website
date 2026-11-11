@@ -634,3 +634,71 @@ class DashboardApiTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         payment.refresh_from_db()
         self.assertTrue(payment.anulado)
+
+    def test_voided_payment_disables_membership_and_preserves_audit(self):
+        payment = registrar_pago(self.member, self.plan, 'efectivo')
+        membership = payment.membership
+        old_dates = (membership.fecha_inicio, membership.fecha_fin)
+        self.client.force_login(self.admin)
+        self.assertEqual(self.client.post(f'/api/payments/{payment.id}/void/').status_code, 200)
+        membership.refresh_from_db()
+        self.assertEqual((membership.fecha_inicio, membership.fecha_fin), old_dates)
+        self.assertFalse(membership.esta_vigente)
+        self.assertFalse(self.member.esta_activo)
+        member_data = self.client.get('/api/members/').json()[0]
+        self.assertEqual(member_data['estado'], 'Sin membresía')
+        self.assertIsNone(member_data['fecha_fin'])
+        dashboard = self.client.get('/api/dashboard/').json()
+        self.assertEqual(dashboard['metrics']['activos'], 0)
+        self.assertEqual(dashboard['metrics']['por_vencer'], 0)
+        self.assertEqual(dashboard['metrics']['ingresos_mes'], 0)
+        self.assertEqual(dashboard['plans'], [])
+        entry = self.client.get('/api/payments/').json()[0]
+        self.assertTrue(entry['anulado'])
+        self.assertFalse(entry['membresia_vigente'])
+        self.assertEqual(entry['fecha_fin'], old_dates[1].isoformat())
+        response = self.client.post(f'/api/memberships/{membership.id}/freeze/')
+        self.assertEqual(response.status_code, 400, response.content)
+        membership.refresh_from_db()
+        self.assertFalse(membership.congelada)
+        self.assertEqual(membership.fecha_fin, old_dates[1])
+
+    def test_previously_voided_payments_are_excluded_from_renewal_and_states(self):
+        payment = registrar_pago(self.member, self.plan, 'efectivo')
+        payment.anulado = True
+        payment.save(update_fields=['anulado'])
+        self.client.force_login(self.admin)
+        self.assertEqual(self.client.get('/api/members/').json()[0]['estado'], 'Sin membresía')
+        self.assertFalse(self.client.get('/api/payments/').json()[0]['membresia_vigente'])
+        renewal = registrar_pago(self.member, self.plan, 'nequi')
+        self.assertEqual(renewal.membership.fecha_inicio, self.hoy)
+        self.assertTrue(self.member.esta_activo)
+        self.assertEqual(self.client.get('/api/dashboard/').json()['metrics']['activos'], 1)
+
+    def test_voiding_preserves_scheduled_renewal_and_other_memberships(self):
+        initial = registrar_pago(self.member, self.plan, 'efectivo')
+        renewal = registrar_pago(self.member, self.plan, 'nequi')
+        dates = (renewal.membership.fecha_inicio, renewal.membership.fecha_fin)
+        self.client.force_login(self.admin)
+        self.assertEqual(self.client.post(f'/api/payments/{initial.id}/void/').status_code, 200)
+        renewal.membership.refresh_from_db()
+        self.assertEqual((renewal.membership.fecha_inicio, renewal.membership.fecha_fin), dates)
+        self.assertEqual(self.client.get('/api/members/').json()[0]['estado'], 'Próxima')
+        metrics = self.client.get('/api/dashboard/').json()['metrics']
+        self.assertEqual(metrics['activos'], 0)
+        self.assertEqual(metrics['proximos'], 1)
+        self.assertEqual(metrics['ingresos_mes'], renewal.monto_cop)
+
+    def test_voiding_future_membership_keeps_other_active_membership(self):
+        active = registrar_pago(self.member, self.plan, 'efectivo')
+        future = registrar_pago(self.member, self.plan, 'nequi')
+        self.client.force_login(self.admin)
+        self.assertEqual(self.client.post(f'/api/payments/{future.id}/void/').status_code, 200)
+        member_data = self.client.get('/api/members/').json()[0]
+        self.assertEqual(member_data['fecha_fin'], active.membership.fecha_fin.isoformat())
+        self.assertEqual(member_data['estado'], 'Activo')
+        self.assertTrue(self.member.esta_activo)
+        self.assertEqual(self.client.get('/api/dashboard/').json()['metrics']['activos'], 1)
+        payments = self.client.get('/api/payments/').json()
+        self.assertTrue(next(item for item in payments if item['id'] == active.id)['membresia_vigente'])
+        self.assertFalse(next(item for item in payments if item['id'] == future.id)['membresia_vigente'])

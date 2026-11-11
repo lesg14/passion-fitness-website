@@ -2,7 +2,7 @@
 
 from django.contrib.auth import authenticate, get_user_model, login, logout
 from django.db import transaction
-from django.db.models import Prefetch, Q
+from django.db.models import Exists, OuterRef, Prefetch, Q
 from django.middleware.csrf import get_token
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -201,7 +201,7 @@ class MemberSerializer(serializers.ModelSerializer):
     def to_representation(self, instance):
         if not hasattr(instance, 'api_memberships'):
             instance.api_memberships = list(
-                instance.memberships.select_related('plan').order_by('-fecha_fin')
+                instance.memberships.operativas().select_related('plan').order_by('-fecha_fin')
             )
         return super().to_representation(instance)
 
@@ -350,7 +350,7 @@ class MemberListCreateView(generics.ListCreateAPIView):
     serializer_class = MemberSerializer
 
     def get_queryset(self):
-        memberships = Membership.objects.select_related('plan').order_by('-fecha_fin')
+        memberships = Membership.objects.operativas().select_related('plan').order_by('-fecha_fin')
         queryset = Member.objects.prefetch_related(
             Prefetch('memberships', queryset=memberships, to_attr='api_memberships')
         ).order_by('apellidos', 'nombres')
@@ -440,7 +440,7 @@ class PaymentSerializer(serializers.ModelSerializer):
     fecha_fin = serializers.DateField(source='membership.fecha_fin', read_only=True)
     membership_id = serializers.IntegerField(read_only=True)
     congelada = serializers.BooleanField(source='membership.congelada', read_only=True)
-    membresia_vigente = serializers.BooleanField(source='membership.esta_vigente', read_only=True)
+    membresia_vigente = serializers.SerializerMethodField()
     member_archivado = serializers.BooleanField(source='member.archivado', read_only=True)
     registrado_por_nombre = serializers.SerializerMethodField()
     metodo_display = serializers.CharField(source='get_metodo_display', read_only=True)
@@ -474,6 +474,13 @@ class PaymentSerializer(serializers.ModelSerializer):
     def get_member_nombre(self, obj):
         return f"{obj.member.nombres} {obj.member.apellidos}"
 
+    def get_membresia_vigente(self, obj):
+        today = timezone.localdate()
+        return (
+            not obj.membership_has_void_payment
+            and obj.membership.fecha_inicio <= today <= obj.membership.fecha_fin
+        )
+
     def get_registrado_por_nombre(self, obj):
         return obj.registrado_por.get_username() if obj.registrado_por else 'Sistema'
 
@@ -485,7 +492,11 @@ class PaymentListCreateView(generics.ListCreateAPIView):
         return PaymentSerializer
 
     def get_queryset(self):
-        qs = Payment.objects.select_related('member', 'membership__plan', 'registrado_por').order_by('-fecha', '-id')
+        qs = Payment.objects.select_related('member', 'membership__plan', 'registrado_por').annotate(
+            membership_has_void_payment=Exists(
+                Payment.objects.filter(membership_id=OuterRef('membership_id'), anulado=True)
+            )
+        ).order_by('-fecha', '-id')
         member_id = self.request.query_params.get('member_id')
         if member_id:
             qs = qs.filter(member_id=member_id)
@@ -520,11 +531,11 @@ class PaymentListCreateView(generics.ListCreateAPIView):
 class PaymentVoidView(APIView):
     permission_classes = [IsAdminRole]
 
+    @transaction.atomic
     def post(self, request, pk):
-        try:
-            payment = Payment.objects.get(pk=pk)
-        except Payment.DoesNotExist:
-            return Response({'detail': 'Pago no encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+        payment = get_object_or_404(Payment, pk=pk)
+        get_object_or_404(Membership.objects.select_for_update(), pk=payment.membership_id)
+        payment = get_object_or_404(Payment.objects.select_for_update(), pk=pk)
         payment.anulado = True
         payment.save(update_fields=['anulado'])
         return Response({'id': payment.id, 'anulado': True})
@@ -546,9 +557,12 @@ def membership_response(membership):
 class MembershipFreezeView(APIView):
     permission_classes = [IsAdminRole]
 
+    @transaction.atomic
     def post(self, request, pk):
-        membership = get_object_or_404(Membership, pk=pk)
+        membership = get_object_or_404(Membership.objects.select_for_update(), pk=pk)
         today = timezone.localdate()
+        if membership.payments.filter(anulado=True).exists():
+            raise serializers.ValidationError({'detail': 'No se puede congelar una membresía con un pago anulado.'})
         if membership.congelada:
             raise serializers.ValidationError({'detail': 'Esta membresía ya fue congelada.'})
         if not membership.fecha_inicio <= today <= membership.fecha_fin:
@@ -557,7 +571,7 @@ class MembershipFreezeView(APIView):
             end_date = membership.fecha_fin + timedelta(days=5)
         except OverflowError:
             raise serializers.ValidationError({'detail': 'La fecha final excede el límite permitido.'})
-        updated = Membership.objects.filter(
+        updated = Membership.objects.operativas().filter(
             pk=pk,
             congelada=False,
             fecha_inicio=membership.fecha_inicio,
