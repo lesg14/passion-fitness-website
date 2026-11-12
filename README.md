@@ -70,6 +70,8 @@ npm run dev
 
 Mantén ambas terminales abiertas. En la pantalla de login de React puedes elegir la pestaña **Staff / Recepción** o **Administrador** según el perfil del usuario.
 
+Si una persona de recepción olvida su contraseña, un administrador puede restablecerla desde Personal. Para una cuenta administradora, usa el contacto de soporte indicado en la pantalla de acceso; no hay recuperación automática por correo ni opción de recordar sesión.
+
 ### Personal de recepción
 
 Entra como administrador y abre **Personal**. Allí puedes crear recepcionistas, editar sus datos, restablecer su contraseña y activar o desactivar su acceso. Para las dos cuentas iniciales, selecciona `recepcion1` y `recepcion2` y asigna una contraseña diferente a cada una; no se crean automáticamente ni se incluyen contraseñas predeterminadas. Las cuentas acceden desde la pestaña **Staff / Recepción** con los permisos operativos existentes.
