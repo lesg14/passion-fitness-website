@@ -11,6 +11,8 @@ import {
   CircleHelp,
   CreditCard,
   Edit2,
+  Eye,
+  EyeOff,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -26,6 +28,7 @@ import {
 } from 'lucide-react';
 import { apiRequest } from './api.js';
 import brandLogo from './passion-fitness-logo.png';
+import developerLogo from './ls-solutions-logo.png';
 import StaffManagement from './StaffManagement.jsx';
 
 const RevenueChart = lazy(() => import('./RevenueChart.jsx'));
@@ -118,6 +121,8 @@ function LoginScreen({ onLogin, connectionError }) {
   const [role, setRole] = useState('admin');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showRecovery, setShowRecovery] = useState(false);
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState('');
 
@@ -136,8 +141,22 @@ function LoginScreen({ onLogin, connectionError }) {
 
   return (
     <main className="login-page">
-      <section className="login-panel">
+      <aside className="login-hero">
         <BrandLogo className="login-logo" />
+        <div className="login-hero-content">
+          <p className="login-hero-eyebrow">PASSION FITNESS · CLUB MANAGEMENT</p>
+          <p className="login-hero-title">Entrena con <span>propósito.</span></p>
+          <p className="login-hero-description">Todo lo que necesitas para llevar tu club al siguiente nivel.</p>
+        </div>
+        <div className="login-hero-footer">
+          <span>© {new Date().getFullYear()} Passion Fitness</span>
+          <span className="login-developer">Desarrollado por <strong>LS Solutions</strong></span>
+        </div>
+      </aside>
+      <section className="login-panel">
+        <p className="login-kicker">{role === 'admin' ? 'PANEL ADMINISTRATIVO' : 'PANEL DE RECEPCIÓN'}</p>
+        <h1>Bienvenido de vuelta</h1>
+        <p className="login-description">Ingresa tus datos para acceder a tu Gimnasio.</p>
 
         <div className="login-tabs" role="tablist" aria-label="Tipo de acceso">
           <button
@@ -160,28 +179,6 @@ function LoginScreen({ onLogin, connectionError }) {
           </button>
         </div>
 
-        {role === 'admin' ? (
-          <>
-            <p className="eyebrow">ACCESO DE ADMINISTRADOR</p>
-            <h1>
-              Control total del club<span>.</span>
-            </h1>
-            <p className="login-description">
-              Modifica planes, edita o elimina miembros, anula pagos y supervisa todas las operaciones.
-            </p>
-          </>
-        ) : (
-          <>
-            <p className="eyebrow">ACCESO PARA STAFF</p>
-            <h1>
-              Bienvenido de vuelta<span>.</span>
-            </h1>
-            <p className="login-description">
-              Acceso operativo para registro diario de miembros, renovaciones y cobro de planes.
-            </p>
-          </>
-        )}
-
         {(connectionError || formError) && (
           <p className="form-error" role="alert">
             {connectionError || formError}
@@ -190,7 +187,7 @@ function LoginScreen({ onLogin, connectionError }) {
 
         <form className="login-form" onSubmit={submit}>
           <label>
-            Usuario o Correo
+            Usuario o correo electrónico
             <input
               autoComplete="username"
               required
@@ -199,20 +196,43 @@ function LoginScreen({ onLogin, connectionError }) {
               placeholder="Ingresa tu usuario o correo"
             />
           </label>
-          <label>
-            Contraseña
-            <input
-              type="password"
-              autoComplete="current-password"
-              required
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-            />
-          </label>
-          <button className="button button-primary" type="submit" disabled={busy || Boolean(connectionError)}>
-            {busy ? 'Ingresando…' : role === 'admin' ? 'Ingresar como Administrador' : 'Ingresar como Staff'}
+          <div className="login-field">
+            <label htmlFor="login-password">Contraseña</label>
+            <span className="login-password-wrap">
+              <input
+                id="login-password"
+                type={showPassword ? 'text' : 'password'}
+                autoComplete="current-password"
+                required
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+              />
+              <button
+                className="login-password-toggle"
+                type="button"
+                aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                aria-pressed={showPassword}
+                onClick={() => setShowPassword((visible) => !visible)}
+              >
+                {showPassword ? <EyeOff size={19} /> : <Eye size={19} />}
+              </button>
+            </span>
+          </div>
+          <div className="login-recovery">
+            <button type="button" className="login-recovery-link" aria-expanded={showRecovery} aria-controls="login-recovery-help" onClick={() => setShowRecovery((open) => !open)}>
+              ¿Olvidaste tu contraseña?
+            </button>
+            {showRecovery && (
+              <p id="login-recovery-help">
+                Si eres de recepción, solicita al administrador que restablezca tu contraseña. Si eres administrador, contacta a <a href="mailto:soporte@passionfitness.co">soporte</a>.
+              </p>
+            )}
+          </div>
+          <button className="login-submit" type="submit" disabled={busy || Boolean(connectionError)}>
+            {busy ? 'Ingresando…' : 'Ingresar al panel'} <ArrowUpRight size={17} aria-hidden="true" />
           </button>
         </form>
+        <p className="login-support">¿Necesitas ayuda? <a href="mailto:soporte@passionfitness.co">Contacta a soporte</a></p>
       </section>
     </main>
   );
