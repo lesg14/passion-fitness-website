@@ -1,5 +1,7 @@
 from django.urls import path
 
+from apps.access.api import CheckInView, TodayAccessView
+
 from .api import (
     AdminProfileView,
     CsrfView,
@@ -38,4 +40,6 @@ urlpatterns = [
     path('payments/', PaymentListCreateView.as_view(), name='api-payments'),
     path('pair-registrations/', PairRegistrationView.as_view(), name='api-pair-registration'),
     path('payments/<int:pk>/void/', PaymentVoidView.as_view(), name='api-payment-void'),
+    path('access/check-in/', CheckInView.as_view(), name='api-access-check-in'),
+    path('access/today/', TodayAccessView.as_view(), name='api-access-today'),
 ]

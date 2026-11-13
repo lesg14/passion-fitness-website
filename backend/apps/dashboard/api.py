@@ -13,14 +13,15 @@ from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
 from rest_framework import generics, serializers, status
-from rest_framework.permissions import AllowAny, BasePermission
+from rest_framework.permissions import AllowAny, BasePermission, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.access.api import es_cuenta_puerta
 from apps.billing.models import Membership, Payment, registrar_pago
 from apps.dashboard.views import calcular_estadisticas
 from apps.members.models import Member
-from apps.members.validators import validate_birth_date, validate_ten_digits
+from apps.members.validators import validate_birth_date, validate_document_number, validate_ten_digits
 from apps.plans.models import Plan
 
 
@@ -187,10 +188,16 @@ class LoginView(APIView):
                 auth_username = user_match.get_username()
 
         user = authenticate(request, username=auth_username, password=password)
-        if user is None or not user.is_active or not (user.is_staff or user.is_superuser):
+        is_door = es_cuenta_puerta(user)
+        if user is None or not user.is_active or not (user.is_staff or user.is_superuser or is_door):
             return Response(
                 {'detail': 'Usuario o contraseña incorrectos.'},
                 status=status.HTTP_400_BAD_REQUEST,
+            )
+        if (requested_role == 'door') != is_door:
+            return Response(
+                {'detail': 'Esta cuenta no corresponde a este tipo de acceso.'},
+                status=status.HTTP_403_FORBIDDEN,
             )
         if requested_role == 'admin' and not user.is_superuser:
             return Response(
@@ -204,7 +211,7 @@ class LoginView(APIView):
             'first_name': user.first_name,
             'is_staff': user.is_staff,
             'is_superuser': user.is_superuser,
-            'role': 'admin' if user.is_superuser else 'staff',
+            'role': 'door' if is_door else 'admin' if user.is_superuser else 'staff',
             'csrfToken': new_csrf,
         })
 
@@ -216,6 +223,15 @@ class SessionView(APIView):
     def get(self, request):
         if not request.user.is_authenticated:
             return Response({'detail': 'Inicia sesión.'}, status=status.HTTP_401_UNAUTHORIZED)
+        if es_cuenta_puerta(request.user):
+            return Response({
+                'username': request.user.get_username(),
+                'first_name': request.user.first_name,
+                'is_staff': False,
+                'is_superuser': False,
+                'role': 'door',
+                'csrfToken': get_token(request),
+            })
         if not (request.user.is_staff or request.user.is_superuser):
             return Response({'detail': 'Se requiere una cuenta de staff o administrador.'}, status=status.HTTP_403_FORBIDDEN)
         return Response({
@@ -229,6 +245,8 @@ class SessionView(APIView):
 
 
 class LogoutView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def post(self, request):
         logout(request)
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -404,7 +422,7 @@ class MemberSerializer(serializers.ModelSerializer):
 
 class MemberValidationFieldsMixin:
     def validate_numero_documento(self, value):
-        validate_ten_digits(value)
+        validate_document_number(value)
         return value
 
     def validate_telefono(self, value):
@@ -439,10 +457,7 @@ class MemberRegistrationSerializer(MemberValidationFieldsMixin, serializers.Seri
     def validate(self, attrs):
         if attrs['plan'].es_pareja:
             raise serializers.ValidationError({'plan_id': 'Registra los planes de pareja con ambos participantes.'})
-        duplicate = Member.objects.filter(
-            tipo_documento=attrs['tipo_documento'],
-            numero_documento=attrs['numero_documento'],
-        ).exists()
+        duplicate = Member.objects.filter(numero_documento=attrs['numero_documento']).exists()
         if duplicate:
             raise serializers.ValidationError({'numero_documento': 'Ya existe un miembro con este documento.'})
         return attrs
@@ -473,10 +488,9 @@ class MemberUpdateSerializer(MemberValidationFieldsMixin, serializers.ModelSeria
         fields = ('id', 'nombres', 'apellidos', 'tipo_documento', 'numero_documento', 'telefono', 'email', 'fecha_nacimiento', 'archivado')
 
     def validate(self, attrs):
-        tipo = attrs.get('tipo_documento', self.instance.tipo_documento if self.instance else None)
         num = attrs.get('numero_documento', self.instance.numero_documento if self.instance else None)
-        if tipo and num:
-            qs = Member.objects.filter(tipo_documento=tipo, numero_documento=num)
+        if num:
+            qs = Member.objects.filter(numero_documento=num)
             if self.instance:
                 qs = qs.exclude(pk=self.instance.pk)
             if qs.exists():
@@ -587,9 +601,7 @@ class PairNewMemberSerializer(MemberValidationFieldsMixin, serializers.Serialize
         return value
 
     def validate(self, attrs):
-        if Member.objects.filter(
-            tipo_documento=attrs['tipo_documento'], numero_documento=attrs['numero_documento']
-        ).exists():
+        if Member.objects.filter(numero_documento=attrs['numero_documento']).exists():
             raise serializers.ValidationError({'numero_documento': 'Ya existe un miembro con este documento.'})
         return attrs
 
@@ -619,10 +631,7 @@ class PairRegistrationSerializer(serializers.Serializer):
         ids = [p['member'].id for p in participants if 'member' in p]
         if len(ids) != len(set(ids)):
             raise serializers.ValidationError('Los participantes deben ser personas diferentes.')
-        documents = [
-            (p['nuevo_miembro']['tipo_documento'], p['nuevo_miembro']['numero_documento'])
-            for p in participants if 'nuevo_miembro' in p
-        ]
+        documents = [p['nuevo_miembro']['numero_documento'] for p in participants if 'nuevo_miembro' in p]
         if len(documents) != len(set(documents)):
             raise serializers.ValidationError('Los participantes no pueden compartir documento.')
         return participants

@@ -188,7 +188,7 @@ class DashboardApiTests(TestCase):
             'fecha_nacimiento': self.hoy.isoformat(),
         }
         cases = [
-            ('numero_documento', '123456789'),
+            ('numero_documento', ''),
             ('numero_documento', '12345678901'),
             ('numero_documento', '123456789a'),
             ('numero_documento', '12345-7890'),
