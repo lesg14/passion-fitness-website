@@ -83,6 +83,8 @@ En **Personal → Mi cuenta de administrador**, cada administrador puede editar 
 
 La contraseña se valida con las reglas de Django y no se devuelve en las respuestas. Al cambiarla o desactivar la cuenta, sus sesiones dejan de estar autorizadas; desactivar no elimina el historial de pagos. También se pueden administrar los usuarios desde **Autenticación y autorización → Usuarios** en Django Admin: para recepción, activa «Es staff» y no actives «Es superusuario» ni concedas permisos administrativos adicionales. El administrador Django conserva sus capacidades generales de gestión de usuarios.
 
+En **Personal → Cuentas de puerta**, el administrador puede crear cuentas para el kiosco, consultar o cambiar su usuario, restablecer su contraseña y activar o desactivar el acceso. Las cuentas no se eliminan por la API; cambiar la contraseña o desactivarlas invalida sus sesiones. El botón de visibilidad muestra únicamente la nueva contraseña mientras se escribe, nunca la contraseña anterior, que no puede recuperarse.
+
 ## Kiosco de acceso
 
 La pantalla de entrada está en `/acceso`. Crea primero la cuenta del dispositivo (no es personal y solo puede registrar ingresos):
@@ -94,6 +96,8 @@ cd backend
 ```
 
 Abre `/acceso` en el equipo de la entrada, activa el dispositivo con esa cuenta y el miembro digita su cédula (1 a 10 números). Verde: más de 3 días restantes; naranja: 1 a 3 días; rojo: vence hoy o acceso denegado con el motivo y la indicación de acercarse a recepción. La apertura de la puerta está simulada. La bitácora se conserva 12 meses; ejecuta periódicamente `..\.venv\Scripts\python manage.py purgar_bitacora_acceso`. `migrate` también cambia la unicidad del documento a solo el número y falla si existen números repetidos con distinto tipo.
+
+En **Ingresos y bitácora**, recepción y administración pueden buscar un miembro y registrar su ingreso manual en línea. Se aplican las mismas reglas de vigencia que en el kiosco; no se abre la puerta, no se crean pagos ni se modifican membresías. Cada intento queda auditado con el usuario responsable, y los reingresos no duplican la asistencia diaria. La pantalla muestra el día actual y permite consultar otra fecha; recepción no ve registros asociados a miembros archivados. Ejecuta `migrate` al actualizar para incorporar los campos de auditoría. Si el servidor o la base de datos no están disponibles, esta función no opera fuera de línea.
 
 ## PostgreSQL
 
@@ -133,6 +137,8 @@ Todos los endpoints requieren sesión autenticada (`is_staff`). Las operaciones 
 | `GET`, `PATCH` | `/api/auth/admin-profile/` | Admin | Consultar o editar la cuenta propia; el cambio de contraseña requiere `current_password` y `password` |
 | `GET`, `POST` | `/api/staff/` | Admin | Listar y crear cuentas de recepción |
 | `GET`, `PATCH` | `/api/staff/<id>/` | Admin | Consultar o actualizar datos, contraseña y acceso de una cuenta de recepción |
+| `GET`, `POST` | `/api/door-accounts/` | Admin | Listar y crear cuentas de puerta |
+| `GET`, `PATCH` | `/api/door-accounts/<id>/` | Admin | Consultar o actualizar usuario, contraseña y acceso de una cuenta de puerta |
 | `GET` | `/api/dashboard/?months=6` | Staff/Admin | Métricas clave, ingresos mensuales y distribución de planes |
 | `GET` | `/api/plans/` | Staff/Admin | Listar planes (activos para staff, todos para admin) |
 | `POST` | `/api/plans/` | Admin | Crear un nuevo plan de membresía |

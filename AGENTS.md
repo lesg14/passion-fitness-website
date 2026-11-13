@@ -159,6 +159,7 @@ Operaciones permitidas:
 - Eliminar un plan (si no tiene membresías activas); si tiene, se desactiva lógicamente.
 - Crear y editar cuentas de recepción, restablecer sus contraseñas y activar o desactivar su acceso desde Personal. Las cuentas usan `is_staff=true` y `is_superuser=false`; no se eliminan mediante la API. Cambiar la contraseña o desactivar el usuario invalida sus sesiones.
 - Editar únicamente su propia cuenta administradora desde Personal. Para cambiar su contraseña debe proporcionar la actual; la sesión actual se conserva y las demás se invalidan.
+- Crear y administrar cuentas de puerta desde Personal: consultar y cambiar usuario, restablecer contraseña y activar o desactivar. No se eliminan mediante la API; cambiar contraseña o desactivar invalida sus sesiones.
 
 ---
 
@@ -406,6 +407,8 @@ Las operaciones `registrar_pago()` y registro de miembro (`create()`) ocurren de
 - Solo se muestra el primer nombre. El reingreso el mismo día no duplica la asistencia pero sí queda en la bitácora.
 - La apertura de la puerta está **simulada** (`abrir_puerta()` en `apps/access/services.py`); la respuesta incluye `puerta`.
 - La bitácora se conserva 12 meses: `manage.py purgar_bitacora_acceso` elimina lo anterior. Las asistencias no se purgan.
+- Recepción y administración disponen de **Ingresos y bitácora**: `POST /api/access/manual/` recibe `member_id`, aplica la misma validación de vigencia y registra el usuario y el origen manual sin abrir la puerta ni modificar pagos o membresías. Un reingreso crea otro intento pero no otra asistencia. Recepción no puede seleccionar miembros archivados.
+- `GET /api/access/today/?fecha=AAAA-MM-DD` consulta intentos por día en Colombia (sin fecha, el día actual). Recepción no ve registros vinculados a miembros archivados; administración sí. El ingreso manual siempre corresponde al día actual y requiere conexión al servidor.
 
 ---
 
