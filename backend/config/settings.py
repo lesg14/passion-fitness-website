@@ -64,6 +64,7 @@ INSTALLED_APPS = [
     'apps.plans',
     'apps.billing',
     'apps.dashboard',
+    'apps.access',
 ]
 
 MIDDLEWARE = [
@@ -184,6 +185,7 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAdminUser',
     ],
+    'DEFAULT_THROTTLE_RATES': {'door': '10/min'},
 }
 
 USE_I18N = True
