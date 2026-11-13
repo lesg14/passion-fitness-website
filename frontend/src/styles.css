@@ -683,3 +683,40 @@ body:has(.login-page) { min-width: 0; }
 .kiosk-login input { min-height: 46px; padding: 0 14px; border: 1px solid #ffffff2e; border-radius: 9px; background: #ffffff0d; color: #fff; font-size: 16px; }
 .kiosk-login button { min-height: 46px; border: 0; border-radius: 9px; background: #ffce2b; color: #151515; font-weight: 800; cursor: pointer; }
 .kiosk-login-error { color: #ff9a9a; font-size: 13px; }
+
+/* Buscador de miembros */
+.member-combobox { position: relative; flex: 1; max-width: 420px; min-width: 0; }
+.member-combobox .history-select-input { width: 100%; max-width: none; }
+.member-combobox .history-select-input.has-selection::placeholder { color: #222d24; font-weight: 600; opacity: 1; }
+.member-combobox-list { position: absolute; top: calc(100% + 4px); right: 0; left: 0; z-index: 30; max-height: 300px; margin: 0; padding: 4px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; background: #fff; box-shadow: 0 14px 38px #00000024; list-style: none; }
+.member-combobox-option { display: grid; gap: 1px; padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+.member-combobox-option small { color: var(--muted); font-size: 11px; }
+.member-combobox-option.is-active, .member-combobox-option:hover { background: var(--brand-soft); }
+.member-combobox-all { border-bottom: 1px solid var(--line); color: #5d5d58; font-weight: 600; }
+.member-combobox-empty { padding: 12px; color: var(--muted); font-size: 12px; text-align: center; }
+@media (max-width: 720px) { .member-combobox { max-width: none; width: 100%; } }
+
+.desktop-menu-toggle { display: none; }
+@media (min-width: 761px) {
+  .sidebar { width: 246px; transform: none; box-shadow: none; overflow-y: auto; transition: width 230ms cubic-bezier(.2, .75, .25, 1); }
+  .sidebar.mobile-open { transform: none; }
+  .mobile-menu-backdrop, .mobile-menu-toggle { display: none; }
+  .desktop-menu-toggle { width: 38px; height: 38px; flex: 0 0 auto; display: grid; place-items: center; border: 1px solid #e8e8e4; border-radius: 7px; background: #fff; color: #151515; cursor: pointer; }
+  .topbar { justify-content: flex-start; gap: 16px; }
+  .topbar-actions { margin-left: auto; }
+  .main-content { width: auto; margin-left: 246px; transition: margin-left 230ms cubic-bezier(.2, .75, .25, 1); }
+  .desktop-menu-collapsed .sidebar { width: 72px; padding-right: 10px; padding-left: 10px; }
+  .desktop-menu-collapsed .brand { padding-bottom: 22px; }
+  .desktop-menu-collapsed .brand-logo { width: 52px; margin: 0; }
+  .desktop-menu-collapsed .brand-wordmark { overflow: hidden; font-size: 9px; }
+  .desktop-menu-collapsed .sidebar-label,
+  .desktop-menu-collapsed .nav-link span,
+  .desktop-menu-collapsed .nav-count,
+  .desktop-menu-collapsed .user-profile-details { display: none; }
+  .desktop-menu-collapsed .nav-link { justify-content: center; padding: 0; }
+  .desktop-menu-collapsed .user-profile-widget { justify-content: center; padding: 8px 0; }
+  .desktop-menu-collapsed .main-content { margin-left: 72px; }
+}
+@media (min-width: 761px) and (prefers-reduced-motion: reduce) {
+  .sidebar, .main-content { transition: none; }
+}
