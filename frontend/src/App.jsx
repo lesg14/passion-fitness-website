@@ -2858,7 +2858,7 @@ export default function App() {
           <div className="page-wrap">
             <section className="page-heading">
               <div>
-                <p className="eyebrow">PANEL DEL CLUB · {isAdmin ? 'MODO TOTAL' : 'MODO OPERATIVO'}</p>
+                <p className="eyebrow">PANEL PRINCIPAL · {isAdmin ? 'MODO TOTAL' : 'MODO OPERATIVO'}</p>
                 <h1>
                   ¡Te damos la bienvenida, {user.first_name || user.user?.first_name || user.username}<span>!</span>
                 </h1>
