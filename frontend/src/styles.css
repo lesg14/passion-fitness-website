@@ -395,6 +395,17 @@ h1 span { color: var(--brand); }
 .page-heading .eyebrow { color: #c99a00; }
 .button-primary { color: #fff; background: #151515; }
 .button-primary:hover { background: #2c2c2c; }
+
+.access-manual, .access-log { margin-bottom: 20px; padding: 20px; }
+.access-manual h2, .access-log h2 { margin: 0 0 8px; }
+.access-manual p, .access-log p { color: #667066; font-size: 12px; }
+.access-manual form { display: grid; gap: 12px; max-width: 520px; margin-top: 18px; font-size: 12px; }
+.access-manual form > .button { justify-self: start; }
+.access-result { padding: 12px; border-radius: 6px; background: #eaf3eb; color: #365f46; line-height: 1.5; }
+.access-result-error { background: #fff2ec; color: #94583f; }
+.access-log .members-heading { gap: 12px; flex-wrap: wrap; }
+.access-log input[type="date"] { min-height: 34px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 5px; }
+.access-log .api-notice { margin: 0 0 15px; }
 .button-quiet:hover { background: #f4f4f1; }
 
 .metric { background: var(--panel-dark); border-color: var(--panel-dark); }
@@ -431,6 +442,10 @@ h1 span { color: var(--brand); }
 .staff-initial p { margin: 0 0 8px; }
 .staff-initial > div, .staff-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .staff-password-note { margin: 0; color: #66665f; font-size: 11px; line-height: 1.5; }
+.staff-password-input { position: relative; display: block; }
+.staff-password-input input { padding-right: 42px; }
+.staff-password-input button { position: absolute; top: 0; right: 0; display: grid; place-items: center; width: 40px; height: 100%; border: 0; background: transparent; color: #59645a; cursor: pointer; }
+.door-accounts { margin-top: 20px; }
 .staff-profile { margin-bottom: 15px; padding-bottom: 17px; }
 .staff-profile-details { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
 .staff-profile-details > div:first-child { display: grid; gap: 5px; min-width: 0; overflow-wrap: anywhere; }
@@ -736,4 +751,20 @@ body:has(.login-page) { min-width: 0; }
 }
 @media (min-width: 761px) and (prefers-reduced-motion: reduce) {
   .sidebar, .main-content { transition: none; }
+}
+
+.topbar { position: sticky; top: 0; z-index: 5; }
+.topbar-datetime { display: flex; align-items: center; gap: 14px; color: #737c72; font-size: 11px; white-space: nowrap; }
+.topbar-datetime .today, .topbar-clock { display: flex; align-items: center; gap: 6px; }
+.topbar-clock { font-variant-numeric: tabular-nums; }
+.topbar-date-short { display: none; }
+@media (max-width: 760px) {
+  .topbar-datetime { gap: 8px; font-size: 10px; }
+  .topbar-date-full { display: none; }
+  .topbar-date-short { display: inline; }
+  .topbar-datetime svg { width: 13px; height: 13px; }
+}
+@media (max-width: 440px) {
+  .topbar .role-pill { display: none; }
+  .topbar { gap: 8px; }
 }

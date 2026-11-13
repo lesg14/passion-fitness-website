@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { apiRequest } from './api.js';
+import PasswordInput from './PasswordInput.jsx';
+import DoorAccountManagement from './DoorAccountManagement.jsx';
 
 const emptyForm = { username: '', first_name: '', last_name: '', email: '', current_password: '', password: '', confirm: '' };
 
@@ -160,6 +162,7 @@ export default function StaffManagement({ showToast, onProfileChanged }) {
           </div>
         )}
       </section>
+      <DoorAccountManagement showToast={showToast} />
       {form && (
         <div className="dialog-backdrop">
           <div className="dialog" role="dialog" aria-modal="true" aria-labelledby="staff-dialog-title">
@@ -175,8 +178,8 @@ export default function StaffManagement({ showToast, onProfileChanged }) {
                 <label>Contraseña actual<input type="password" required autoComplete="current-password" value={form.current_password} onChange={(e) => setForm({ ...form, current_password: e.target.value })} /></label>
               )}
               {['create', 'password', 'profile-password'].includes(mode) && <>
-                <label>Contraseña<input type="password" required autoComplete="new-password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></label>
-                <label>Confirmar contraseña<input type="password" required autoComplete="new-password" value={form.confirm} onChange={(e) => setForm({ ...form, confirm: e.target.value })} /></label>
+                <PasswordInput label="Nueva contraseña" autoComplete="new-password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+                <PasswordInput label="Confirmar contraseña" autoComplete="new-password" value={form.confirm} onChange={(e) => setForm({ ...form, confirm: e.target.value })} />
                 <p className="staff-password-note">Usa al menos 8 caracteres; evita contraseñas comunes, totalmente numéricas o parecidas a los datos del usuario.</p>
               </>}
               {formError && <div className="form-error" role="alert">{formError}</div>}

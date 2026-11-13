@@ -9,6 +9,7 @@ import {
   Check,
   ChevronDown,
   CircleHelp,
+  Clock,
   CreditCard,
   Edit2,
   Eye,
@@ -28,6 +29,7 @@ import {
 import { apiRequest } from './api.js';
 import brandLogo from './passion-fitness-logo.png';
 import StaffManagement from './StaffManagement.jsx';
+import AccessManagement from './AccessManagement.jsx';
 import { matchesMemberSearch } from './memberSearch.js';
 
 const RevenueChart = lazy(() => import('./RevenueChart.jsx'));
@@ -194,6 +196,44 @@ function BrandLogo({ className }) {
   const [failed, setFailed] = useState(false);
   if (failed) return <span className={`brand-wordmark ${className}`}>PASSION FITNESS</span>;
   return <img className={className} src={brandLogo} alt="Passion Fitness" onError={() => setFailed(true)} />;
+}
+
+const bogotaDateFormatter = new Intl.DateTimeFormat('es-CO', {
+  weekday: 'long', day: 'numeric', month: 'long', timeZone: 'America/Bogota',
+});
+const bogotaShortDateFormatter = new Intl.DateTimeFormat('es-CO', {
+  day: 'numeric', month: 'short', timeZone: 'America/Bogota',
+});
+const bogotaTimeFormatter = new Intl.DateTimeFormat('es-CO', {
+  hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: 'America/Bogota',
+});
+
+function CurrentDateTime() {
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const date = bogotaDateFormatter.format(now);
+  const time = bogotaTimeFormatter.format(now);
+
+  return (
+    <div className="topbar-datetime" aria-label={`${date}, ${time}, hora de Colombia`}>
+      <span className="today">
+        <CalendarDays size={15} aria-hidden="true" />
+        <time dateTime={now.toISOString()}>
+          <span className="topbar-date-full">{date}</span>
+          <span className="topbar-date-short">{bogotaShortDateFormatter.format(now)}</span>
+        </time>
+      </span>
+      <span className="topbar-clock">
+        <Clock size={15} aria-hidden="true" />
+        <time dateTime={now.toISOString()}>{time}</time>
+      </span>
+    </div>
+  );
 }
 
 function LoginScreen({ onLogin, connectionError }) {
@@ -2754,13 +2794,6 @@ export default function App() {
   if (!user) return <LoginScreen onLogin={handleLogin} connectionError={connectionError} />;
 
   const metrics = dashboard?.metrics;
-  const today = new Intl.DateTimeFormat('es-CO', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    timeZone: 'America/Bogota',
-  }).format(new Date());
-
   const isAdmin = user.role === 'admin';
 
   return (
@@ -2831,6 +2864,12 @@ export default function App() {
           >
             <Receipt size={18} />
             <span>Historial de Pagos</span>
+          </button>
+          <button type="button" className={`nav-link ${activeTab === 'access' ? 'selected' : ''}`}
+            aria-label="Ingresos y bitácora" title="Ingresos y bitácora"
+            onClick={() => { setActiveTab('access'); setMobileMenuOpen(false); }}>
+            <Activity size={18} />
+            <span>Ingresos y bitácora</span>
           </button>
 
           {isAdmin && (
@@ -2915,6 +2954,8 @@ export default function App() {
             <strong>
               {activeTab === 'plans'
                 ? 'Planes de Membresía'
+                : activeTab === 'access'
+                ? 'Ingresos y bitácora'
                 : activeTab === 'staff'
                 ? 'Personal'
                 : activeTab === 'members'
@@ -2928,9 +2969,7 @@ export default function App() {
             <span className={`role-pill ${isAdmin ? 'admin' : 'staff'}`}>
               {isAdmin ? 'ADMINISTRADOR' : 'STAFF'}
             </span>
-            <span className="today">
-              <CalendarDays size={15} /> {today}
-            </span>
+            <CurrentDateTime />
             <span className="user-avatar" aria-label={`Sesión de ${user.username}`}>
               {user.username.slice(0, 2).toUpperCase()}
             </span>
@@ -2958,6 +2997,8 @@ export default function App() {
             showToast={showToast}
             onRefreshData={() => setRefreshKey((c) => c + 1)}
           />
+        ) : activeTab === 'access' ? (
+          <AccessManagement members={members} MemberCombobox={MemberCombobox} />
         ) : activeTab === 'history' ? (
           <PaymentHistoryView
             members={members}
