@@ -29,7 +29,7 @@ class Member(models.Model):
     class Meta:
         ordering = ["apellidos", "nombres"]
         constraints = [
-            models.UniqueConstraint(fields=["tipo_documento", "numero_documento"], name="documento_unico")
+            models.UniqueConstraint(fields=["numero_documento"], name="numero_documento_unico")
         ]
 
     def __str__(self):

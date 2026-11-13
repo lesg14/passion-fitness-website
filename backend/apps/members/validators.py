@@ -8,6 +8,10 @@ validate_ten_digits = RegexValidator(
     message="Debe contener exactamente 10 dígitos, sin letras ni caracteres especiales.",
 )
 
+validate_document_number = RegexValidator(
+    regex=r"\A[0-9]{1,10}\Z",
+    message="Debe contener entre 1 y 10 dígitos, sin letras ni caracteres especiales.",
+)
 
 def validate_birth_date(value):
     if value > timezone.localdate():

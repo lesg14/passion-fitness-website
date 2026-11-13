@@ -2,11 +2,11 @@ from django import forms
 from django.contrib import admin
 
 from .models import Member
-from .validators import validate_birth_date, validate_ten_digits
+from .validators import validate_birth_date, validate_document_number, validate_ten_digits
 
 
 class MemberAdminForm(forms.ModelForm):
-    numero_documento = forms.CharField(max_length=20, strip=False, validators=[validate_ten_digits])
+    numero_documento = forms.CharField(max_length=20, strip=False, validators=[validate_document_number])
     telefono = forms.CharField(max_length=20, required=False, strip=False, validators=[validate_ten_digits])
     fecha_nacimiento = forms.DateField(required=False, validators=[validate_birth_date])
 
