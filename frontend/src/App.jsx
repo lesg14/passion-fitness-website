@@ -110,7 +110,7 @@ function getAvatarTone(estado) {
   return 'lilac';
 }
 
-function MemberCombobox({ members, value, onChange, placeholder = 'Escribe un nombre o documento…', emptyLabel = 'Ver pagos de todos los miembros' }) {
+function MemberCombobox({ members, value, onChange, placeholder = 'Escribe un nombre o documento…', emptyLabel = 'Ver pagos de todos los miembros', label = 'Buscar miembro' }) {
   const listId = useId();
   const [open, setOpen] = useState(false);
   const [text, setText] = useState('');
@@ -150,6 +150,7 @@ function MemberCombobox({ members, value, onChange, placeholder = 'Escribe un no
       <input
         className={`history-select-input ${selected ? 'has-selection' : ''}`}
         role="combobox"
+        aria-label={label}
         aria-expanded={open}
         aria-controls={listId}
         aria-autocomplete="list"
@@ -162,9 +163,11 @@ function MemberCombobox({ members, value, onChange, placeholder = 'Escribe un no
       />
       {open && (
         <ul className="member-combobox-list" id={listId} role="listbox">
-          <li role="option" aria-selected={!value} tabIndex={-1} className="member-combobox-option member-combobox-all" onMouseDown={(event) => event.preventDefault()} onClick={() => choose(null)}>
-            {emptyLabel}
-          </li>
+          {emptyLabel && (
+            <li role="option" aria-selected={!value} tabIndex={-1} className="member-combobox-option member-combobox-all" onMouseDown={(event) => event.preventDefault()} onClick={() => choose(null)}>
+              {emptyLabel}
+            </li>
+          )}
           {options.map((member, index) => (
             <li
               key={member.id}
@@ -664,6 +667,45 @@ function MemberDialog({ plans, members, onClose, onAdd, onPairSuccess }) {
             <button className="button button-primary" type="submit" disabled={busy || !plans.length}>
               {busy ? 'Guardando…' : 'Registrar y cobrar'}
             </button>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
+}
+
+function NewPaymentDialog({ members, plans, onClose, onSuccess }) {
+  const [memberId, setMemberId] = useState('');
+  const [continueToPayment, setContinueToPayment] = useState(false);
+  const activeMembers = members.filter((member) => !member.archivado);
+  const member = activeMembers.find((item) => String(item.id) === memberId);
+
+  if (continueToPayment && member) {
+    return <RenewPaymentDialog member={member} plans={plans} members={members} onClose={onClose} onSuccess={onSuccess} />;
+  }
+
+  return (
+    <div className="dialog-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <section className="dialog" role="dialog" aria-modal="true" aria-labelledby="new-payment-title">
+        <div className="dialog-heading">
+          <div>
+            <span className="eyebrow">PAGOS Y MEMBRESÍAS</span>
+            <h2 id="new-payment-title">Registrar nuevo pago</h2>
+          </div>
+          <button className="icon-button" type="button" onClick={onClose} aria-label="Cerrar">
+            <X size={19} />
+          </button>
+        </div>
+        <form className="member-form" onSubmit={(event) => { event.preventDefault(); if (member) setContinueToPayment(true); }}>
+          <div className="payment-member-search">
+            <span>Selecciona un miembro</span>
+            <MemberCombobox members={activeMembers} value={memberId} onChange={setMemberId} emptyLabel={null} label="Selecciona un miembro" />
+          </div>
+          {!activeMembers.length && <p>No hay miembros disponibles para registrar un pago.</p>}
+          {!plans.length && <p>No hay planes activos disponibles para registrar un pago.</p>}
+          <div className="dialog-actions">
+            <button className="button button-quiet" type="button" onClick={onClose}>Cancelar</button>
+            <button className="button button-primary" type="submit" disabled={!member || !plans.length}>Continuar</button>
           </div>
         </form>
       </section>
@@ -2579,6 +2621,7 @@ export default function App() {
   const [plans, setPlans] = useState([]);
   const [dataError, setDataError] = useState('');
   const [showAddMemberDialog, setShowAddMemberDialog] = useState(false);
+  const [showNewPaymentDialog, setShowNewPaymentDialog] = useState(false);
   const [selectedMemberForRenewal, setSelectedMemberForRenewal] = useState(null);
   const [selectedMemberForEdit, setSelectedMemberForEdit] = useState(null);
   const [selectedMemberForDelete, setSelectedMemberForDelete] = useState(null);
@@ -2944,6 +2987,9 @@ export default function App() {
                     <SlidersHorizontal size={16} /> Gestionar Planes
                   </button>
                 )}
+                <button className="button button-quiet" type="button" onClick={() => setShowNewPaymentDialog(true)}>
+                  <CreditCard size={16} /> Registrar pago
+                </button>
                 <button className="button button-primary" type="button" onClick={() => setShowAddMemberDialog(true)}>
                   <Plus size={17} /> Añadir miembro
                 </button>
@@ -3254,6 +3300,17 @@ export default function App() {
       </main>
 
       {/* Diálogos modales globales */}
+      {showNewPaymentDialog && (
+        <NewPaymentDialog
+          members={members}
+          plans={plans}
+          onClose={() => setShowNewPaymentDialog(false)}
+          onSuccess={(msg) => {
+            showToast(msg);
+            setRefreshKey((current) => current + 1);
+          }}
+        />
+      )}
       {showAddMemberDialog && (
         <MemberDialog
           plans={plans}
