@@ -686,11 +686,12 @@ function NewPaymentDialog({ members, plans, onClose, onSuccess }) {
 
   return (
     <div className="dialog-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <section className="dialog" role="dialog" aria-modal="true" aria-labelledby="new-payment-title">
+      <section className="dialog new-payment-dialog" role="dialog" aria-modal="true" aria-labelledby="new-payment-title">
         <div className="dialog-heading">
           <div>
             <span className="eyebrow">PAGOS Y MEMBRESÍAS</span>
             <h2 id="new-payment-title">Registrar nuevo pago</h2>
+            <p className="new-payment-description">Busca al miembro para registrar su pago o renovar su membresía.</p>
           </div>
           <button className="icon-button" type="button" onClick={onClose} aria-label="Cerrar">
             <X size={19} />

@@ -696,7 +696,22 @@ body:has(.login-page) { min-width: 0; }
 .member-combobox-empty { padding: 12px; color: var(--muted); font-size: 12px; text-align: center; }
 .payment-member-search { display: grid; gap: 7px; color: #5d685e; font-size: 11px; font-weight: 600; }
 .payment-member-search .member-combobox { width: 100%; max-width: none; }
+.new-payment-dialog { width: min(100%, 680px); max-height: calc(100dvh - 36px); overflow-y: auto; padding: 32px; border-radius: 14px; }
+.new-payment-dialog .dialog-heading { gap: 16px; margin-bottom: 26px; }
+.new-payment-dialog .dialog-heading h2 { margin: 4px 0 8px; font-size: 24px; }
+.new-payment-description { margin: 0; color: #74746f; font-size: 13px; line-height: 1.5; }
+.new-payment-dialog .member-form { max-height: none; overflow: visible; gap: 20px; }
+.new-payment-dialog .payment-member-search { gap: 10px; font-size: 13px; }
+.new-payment-dialog .history-select-input { height: 48px; padding: 0 14px; font-size: 14px; }
+.new-payment-dialog .member-combobox-list { position: static; max-height: min(260px, 30dvh); margin-top: 8px; box-shadow: none; }
+.new-payment-dialog .member-combobox-option { gap: 4px; padding: 12px 14px; font-size: 14px; }
+.new-payment-dialog .member-combobox-option small { font-size: 12px; }
+.new-payment-dialog .dialog-actions { padding-top: 4px; }
 @media (max-width: 720px) { .member-combobox { max-width: none; width: 100%; } }
+@media (max-width: 760px) {
+  .new-payment-dialog { width: 100%; max-width: 560px; max-height: calc(100dvh - 24px); padding: 22px 18px; }
+  .new-payment-dialog .dialog-heading h2 { font-size: 21px; }
+}
 
 .desktop-menu-toggle { display: none; }
 @media (min-width: 761px) {
