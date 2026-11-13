@@ -28,6 +28,7 @@ import {
 import { apiRequest } from './api.js';
 import brandLogo from './passion-fitness-logo.png';
 import StaffManagement from './StaffManagement.jsx';
+import { matchesMemberSearch } from './memberSearch.js';
 
 const RevenueChart = lazy(() => import('./RevenueChart.jsx'));
 const PlansChart = lazy(() => import('./PlansChart.jsx'));
@@ -107,6 +108,83 @@ function getAvatarTone(estado) {
   if (estado === 'Vence hoy') return 'coral';
   if (['Vence mañana', 'Vence en 2 días', 'Vence en 3 días'].includes(estado)) return 'coral';
   return 'lilac';
+}
+
+function MemberCombobox({ members, value, onChange, placeholder = 'Escribe un nombre o documento…', emptyLabel = 'Ver pagos de todos los miembros' }) {
+  const listId = useId();
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState('');
+  const [active, setActive] = useState(0);
+  const selected = members.find((member) => String(member.id) === String(value)) || null;
+
+  const options = useMemo(() => {
+    const found = members.filter((member) => matchesMemberSearch(member, text));
+    return found.slice(0, 50);
+  }, [members, text]);
+
+  function choose(id) {
+    onChange(id === null ? '' : String(id));
+    setText('');
+    setOpen(false);
+  }
+
+  function onKeyDown(event) {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setOpen(true);
+      setActive((current) => Math.min(current + 1, options.length - 1));
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setActive((current) => Math.max(current - 1, 0));
+    } else if (event.key === 'Enter' && open) {
+      event.preventDefault();
+      if (options[active]) choose(options[active].id);
+    } else if (event.key === 'Escape') {
+      setOpen(false);
+      setText('');
+    }
+  }
+
+  return (
+    <div className="member-combobox" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) { setOpen(false); setText(''); } }}>
+      <input
+        className={`history-select-input ${selected ? 'has-selection' : ''}`}
+        role="combobox"
+        aria-expanded={open}
+        aria-controls={listId}
+        aria-autocomplete="list"
+        autoComplete="off"
+        placeholder={selected ? `${selected.nombre} (${selected.numero_documento})` : placeholder}
+        value={text}
+        onFocus={() => setOpen(true)}
+        onChange={(event) => { setText(event.target.value); setActive(0); setOpen(true); }}
+        onKeyDown={onKeyDown}
+      />
+      {open && (
+        <ul className="member-combobox-list" id={listId} role="listbox">
+          <li role="option" aria-selected={!value} tabIndex={-1} className="member-combobox-option member-combobox-all" onMouseDown={(event) => event.preventDefault()} onClick={() => choose(null)}>
+            {emptyLabel}
+          </li>
+          {options.map((member, index) => (
+            <li
+              key={member.id}
+              role="option"
+              aria-selected={String(member.id) === String(value)}
+              tabIndex={-1}
+              className={`member-combobox-option ${index === active ? 'is-active' : ''}`}
+              onMouseDown={(event) => event.preventDefault()}
+              onMouseEnter={() => setActive(index)}
+              onClick={() => choose(member.id)}
+            >
+              <strong>{member.nombre}</strong>
+              <small>{member.numero_documento} · {member.plan || 'Sin plan'}{member.archivado ? ' · Archivado' : ''}</small>
+            </li>
+          ))}
+          {options.length === 0 && <li className="member-combobox-empty">Sin coincidencias</li>}
+        </ul>
+      )}
+    </div>
+  );
 }
 
 function BrandLogo({ className }) {
@@ -1153,8 +1231,6 @@ function MembersManagementView({
     let prox = 0;
     let venc = 0;
     let archivados = 0;
-    const term = query.toLocaleLowerCase('es').trim();
-
     members.forEach((m) => {
       if (m.archivado) archivados++;
       else if (m.estado === 'Activo') act++;
@@ -1164,13 +1240,7 @@ function MembersManagementView({
     });
 
     const filtered = members.filter((member) => {
-      const matchText =
-        !term ||
-        `${member.nombre} ${member.email || ''} ${member.plan || ''} ${member.numero_documento || ''} ${member.telefono || ''}`
-          .toLocaleLowerCase('es')
-          .includes(term);
-
-      if (!matchText) return false;
+      if (!matchesMemberSearch(member, query, [member.plan, member.telefono])) return false;
 
       if (statusFilter === 'archivados') return member.archivado;
       if (member.archivado) return statusFilter === 'todos';
@@ -2195,18 +2265,7 @@ function PaymentHistoryView({
           <label style={{ fontSize: 11, fontWeight: 700, color: '#314235', display: 'flex', alignItems: 'center', gap: 6 }}>
             <Users size={16} /> Miembro seleccionado:
           </label>
-          <select
-            className="history-select-input"
-            value={selectedMemberId}
-            onChange={(e) => setSelectedMemberId(e.target.value)}
-          >
-            <option value="">— Ver pagos de todos los miembros —</option>
-            {members.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.nombre} (CC {m.numero_documento}) · {m.plan || 'Sin plan'}
-              </option>
-            ))}
-          </select>
+          <MemberCombobox members={members} value={selectedMemberId} onChange={setSelectedMemberId} />
         </div>
         {selectedMemberId && (
           <button
@@ -2510,6 +2569,7 @@ export default function App() {
   const [connectionError, setConnectionError] = useState('');
   const [activeTab, setActiveTab] = useState('dashboard');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [desktopMenuCollapsed, setDesktopMenuCollapsed] = useState(false);
   const [historyMemberId, setHistoryMemberId] = useState(null);
   const [period, setPeriod] = useState(6);
   const [query, setQuery] = useState('');
@@ -2607,8 +2667,6 @@ export default function App() {
     let venc = 0;
     let archivados = 0;
 
-    const term = query.toLocaleLowerCase('es').trim();
-
     members.forEach((m) => {
       if (m.archivado) archivados++;
       else if (m.estado === 'Activo') act++;
@@ -2618,13 +2676,7 @@ export default function App() {
     });
 
     const filtered = members.filter((member) => {
-      const matchText =
-        !term ||
-        `${member.nombre} ${member.email} ${member.plan} ${member.numero_documento}`
-          .toLocaleLowerCase('es')
-          .includes(term);
-
-      if (!matchText) return false;
+      if (!matchesMemberSearch(member, query, [member.plan])) return false;
       if (member.archivado) return false;
 
       if (statusFilter === 'activos') return member.estado === 'Activo';
@@ -2668,7 +2720,7 @@ export default function App() {
   const isAdmin = user.role === 'admin';
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${desktopMenuCollapsed ? 'desktop-menu-collapsed' : ''}`}>
       {mobileMenuOpen && (
         <button
           className="mobile-menu-backdrop"
@@ -2677,7 +2729,7 @@ export default function App() {
           onClick={() => setMobileMenuOpen(false)}
         />
       )}
-      <aside className={`sidebar ${mobileMenuOpen ? 'mobile-open' : ''}`}>
+      <aside id="main-sidebar" className={`sidebar ${mobileMenuOpen ? 'mobile-open' : ''}`}>
         <a
           className="brand"
           href="#resumen"
@@ -2696,6 +2748,8 @@ export default function App() {
           <button
             type="button"
             className={`nav-link ${activeTab === 'dashboard' ? 'selected' : ''}`}
+            aria-label="Resumen"
+            title="Resumen"
             onClick={() => {
               setActiveTab('dashboard');
               setMobileMenuOpen(false);
@@ -2708,6 +2762,8 @@ export default function App() {
           <button
             type="button"
             className={`nav-link ${activeTab === 'members' ? 'selected' : ''}`}
+            aria-label="Miembros"
+            title="Miembros"
             onClick={() => {
               setActiveTab('members');
               setMobileMenuOpen(false);
@@ -2721,6 +2777,8 @@ export default function App() {
           <button
             type="button"
             className={`nav-link ${activeTab === 'history' ? 'selected' : ''}`}
+            aria-label="Historial de Pagos"
+            title="Historial de Pagos"
             onClick={() => {
               setHistoryMemberId(null);
               setActiveTab('history');
@@ -2735,6 +2793,8 @@ export default function App() {
             <button
               type="button"
               className={`nav-link ${activeTab === 'plans' ? 'selected' : ''}`}
+              aria-label="Gestionar Planes"
+              title="Gestionar Planes"
               onClick={() => {
                 setActiveTab('plans');
                 setMobileMenuOpen(false);
@@ -2745,7 +2805,7 @@ export default function App() {
             </button>
           )}
           {isAdmin && (
-            <button type="button" className={`nav-link ${activeTab === 'staff' ? 'selected' : ''}`} onClick={() => {
+            <button type="button" className={`nav-link ${activeTab === 'staff' ? 'selected' : ''}`} aria-label="Personal" title="Personal" onClick={() => {
               setActiveTab('staff');
               setMobileMenuOpen(false);
             }}>
@@ -2757,7 +2817,7 @@ export default function App() {
 
         <div className="sidebar-bottom">
           <div className="sidebar-label">CLUB</div>
-          <a className="nav-link" href="mailto:soporte@passionfitness.co">
+          <a className="nav-link" href="mailto:soporte@passionfitness.co" aria-label="Soporte" title="Soporte">
             <CircleHelp size={18} />
             <span>Soporte</span>
           </a>
@@ -2790,7 +2850,18 @@ export default function App() {
             type="button"
             aria-label={mobileMenuOpen ? 'Cerrar menú' : 'Abrir menú'}
             aria-expanded={mobileMenuOpen}
+            aria-controls="main-sidebar"
             onClick={() => setMobileMenuOpen((open) => !open)}
+          >
+            <Menu size={19} />
+          </button>
+          <button
+            className="desktop-menu-toggle"
+            type="button"
+            aria-label={desktopMenuCollapsed ? 'Expandir menú' : 'Contraer menú'}
+            aria-expanded={!desktopMenuCollapsed}
+            aria-controls="main-sidebar"
+            onClick={() => setDesktopMenuCollapsed((collapsed) => !collapsed)}
           >
             <Menu size={19} />
           </button>
