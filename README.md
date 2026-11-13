@@ -14,6 +14,7 @@ passion-fitness-website/
 │       ├── members/         # miembros (documento CO, Habeas Data, user opcional)
 │       ├── plans/           # planes de membresía (COP)
 │       ├── billing/         # membresías y pagos (registrar_pago)
+│       ├── access/          # asistencia, bitácora y check-in del kiosco
 │       └── dashboard/       # estadísticas y API REST
 ├── frontend/                # Aplicación React/Vite
 │   ├── index.html           # Entrada de Vite
@@ -80,6 +81,18 @@ En **Personal → Mi cuenta de administrador**, cada administrador puede editar 
 
 La contraseña se valida con las reglas de Django y no se devuelve en las respuestas. Al cambiarla o desactivar la cuenta, sus sesiones dejan de estar autorizadas; desactivar no elimina el historial de pagos. También se pueden administrar los usuarios desde **Autenticación y autorización → Usuarios** en Django Admin: para recepción, activa «Es staff» y no actives «Es superusuario» ni concedas permisos administrativos adicionales. El administrador Django conserva sus capacidades generales de gestión de usuarios.
 
+## Kiosco de acceso
+
+La pantalla de entrada está en `/acceso`. Crea primero la cuenta del dispositivo (no es personal y solo puede registrar ingresos):
+
+```powershell
+cd backend
+..\.venv\Scripts\python manage.py migrate
+..\.venv\Scripts\python manage.py crear_usuario_puerta
+```
+
+Abre `/acceso` en el equipo de la entrada, activa el dispositivo con esa cuenta y el miembro digita su cédula (1 a 10 números). Verde: más de 3 días restantes; naranja: 1 a 3 días; rojo: vence hoy o acceso denegado con el motivo y la indicación de acercarse a recepción. La apertura de la puerta está simulada. La bitácora se conserva 12 meses; ejecuta periódicamente `..\.venv\Scripts\python manage.py purgar_bitacora_acceso`. `migrate` también cambia la unicidad del documento a solo el número y falla si existen números repetidos con distinto tipo.
+
 ## PostgreSQL
 
 El desarrollo local usa SQLite por defecto. Para preparar PostgreSQL 18 local:
@@ -136,7 +149,7 @@ Todos los endpoints requieren sesión autenticada (`is_staff`). Las operaciones 
 | `POST` | `/api/memberships/<id>/freeze/` | Admin | Añadir 5 días a una membresía vigente, una sola vez |
 | `PATCH` | `/api/memberships/<id>/start-date/` | Staff/Admin | Corregir `fecha_inicio`, desplazando `fecha_fin` para conservar la duración |
 
-La fecha de nacimiento es opcional y no puede ser posterior a hoy en Colombia; si no se conoce, se conserva como `NULL`. El número de documento debe tener exactamente 10 dígitos; el teléfono es opcional y, si se proporciona, también debe tener exactamente 10 dígitos. Estas validaciones se aplican al registrar o modificar los campos, para todos los tipos de documento. Los datos anteriores no se modifican automáticamente.
+La fecha de nacimiento es opcional y no puede ser posterior a hoy en Colombia; si no se conoce, se conserva como `NULL`. El número de documento debe tener de 1 a 10 dígitos; el teléfono es opcional y, si se proporciona, debe tener exactamente 10 dígitos. Estas validaciones se aplican al registrar o modificar los campos, para todos los tipos de documento. Los datos anteriores no se modifican automáticamente.
 
 El correo electrónico es opcional y, si se proporciona, debe tener un formato válido (por ejemplo, `nombre@ejemplo.com`). El formulario realiza una comprobación inicial y el servidor valida el formato al registrar o editar; estas comprobaciones no verifican que la dirección exista.
 

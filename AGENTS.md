@@ -11,7 +11,7 @@ Persona registrada en el gimnasio.
 **Atributos:**
 - `nombres`, `apellidos`: Nombre completo (máx. 100 caracteres cada uno).
 - `tipo_documento`: CC (Cédula de ciudadanía), CE (Cédula de extranjería), TI (Tarjeta de identidad), PAS (Pasaporte).
-- `numero_documento`: Identificación única por tipo; al registrar o modificar debe tener exactamente 10 dígitos ASCII. Restricción: combinación `(tipo_documento, numero_documento)` es única en la base de datos.
+- `numero_documento`: Identificación única por número, sin importar el tipo; al registrar o modificar debe tener de 1 a 10 dígitos ASCII (máximo 10). Restricción: `numero_documento` es único en la base de datos (el kiosco de acceso no pide el tipo).
 - `telefono`: Contacto opcional; al proporcionar o modificar debe tener exactamente 10 dígitos ASCII.
 - `email`: Correo electrónico opcional; si se proporciona, debe tener formato válido.
 - `fecha_nacimiento`: Fecha de nacimiento opcional, no posterior a hoy en Colombia.
@@ -21,7 +21,7 @@ Persona registrada en el gimnasio.
 - `user`: Relación opcional con `django.contrib.auth.models.User`. Reservada para portal futuro del cliente.
 
 **Restricciones de negocio:**
-- El documento (tipo + número) debe ser único; impide duplicados.
+- El documento (solo el número) debe ser único; impide duplicados.
 - Al registrar un miembro, se requiere consentimiento explícito para el tratamiento de datos personales.
 - Un miembro archivado no aparece en búsquedas ni listas operativas salvo si el administrador solicita explícitamente incluirlos (`include_archived=true`).
 - El historial de pagos y membresías de un miembro archivado permanece disponible para auditoría e informes.
@@ -195,7 +195,7 @@ Operaciones permitidas:
 ```
 
 **Flujo atómico:**
-1. Valida que no exista un miembro con el mismo `(tipo_documento, numero_documento)`.
+1. Valida que no exista un miembro con el mismo `numero_documento`.
 2. Valida que `acepta_datos == true`.
 3. Valida que el plan sea activo.
 4. Crea el `Member` con `acepta_datos_en = timezone.now()`.
@@ -346,10 +346,10 @@ Operaciones permitidas:
 ## Validaciones Comunes
 
 ### Datos de identificación y contacto
-Al registrar o modificar, el documento debe tener exactamente 10 dígitos para todos los tipos; el teléfono, si se proporciona, también. No se aceptan letras ni caracteres especiales. La fecha de nacimiento no puede ser posterior a hoy en `America/Bogota`. Los registros existentes no se alteran automáticamente.
+Al registrar o modificar, el documento debe tener de 1 a 10 dígitos para todos los tipos; el teléfono, si se proporciona, exactamente 10. No se aceptan letras ni caracteres especiales. La fecha de nacimiento no puede ser posterior a hoy en `America/Bogota`. Los registros existentes no se alteran automáticamente.
 
 ### Documento Único
-Antes de crear o actualizar un miembro, se valida que no exista otra persona con el mismo `(tipo_documento, numero_documento)`. Esto es una restricción de base de datos (`UniqueConstraint`).
+Antes de crear o actualizar un miembro, se valida que no exista otra persona con el mismo `numero_documento`, sin importar el tipo. Esto es una restricción de base de datos (`UniqueConstraint`).
 
 ### Consentimiento de Datos
 Al registrar un nuevo miembro, se requiere `acepta_datos = true`. Se registra el timestamp en `acepta_datos_en` para cumplimiento legal.
@@ -384,6 +384,28 @@ Las operaciones `registrar_pago()` y registro de miembro (`create()`) ocurren de
 - **Payment → Member**: Obligatorio (`PROTECT`). No se puede eliminar un miembro si tiene pagos.
 - **Payment → Membership**: Obligatorio (`PROTECT`). No se puede eliminar una membresía si tiene pagos asociados.
 - **Payment → User**: Opcional (`null=True`). Si se elimina el usuario, `Payment.registrado_por` se establece en `NULL`.
+- **Asistencia → Member** y **RegistroAcceso → Member**: `PROTECT`; `RegistroAcceso.member` es nulo si el documento digitado no existe.
+
+---
+
+## Control de Acceso y Asistencia (kiosco `/acceso`)
+
+**Entidades:** `Asistencia` (un registro por miembro y día local, único `(member, fecha)`; fuente del futuro calendario) y `RegistroAcceso` (bitácora de cada intento: resultado `permitido|denegado`, motivo, días restantes, dispositivo). Ninguna se edita desde la API.
+
+**Endpoint:** `POST /api/access/check-in/` con `{"numero_documento": "1234567890"}` (1 a 10 dígitos). Solo lo puede usar la cuenta de dispositivo del grupo `Puerta` (o un administrador); se crea con `manage.py crear_usuario_puerta`. Esa cuenta no es `is_staff` y no accede a ningún otro endpoint. El login usa `role: "door"`. Límite: 10 intentos por minuto y bloqueo de 60 s tras 5 documentos inexistentes seguidos. `GET /api/access/today/` (recepción) lista los intentos del día.
+
+**Regla de acceso** (membresías sin pagos anulados):
+
+| Situación | Resultado | Color | Mensaje |
+|---|---|---|---|
+| Vigente, más de 3 días restantes | Permitido | Verde | "Bienvenido/a Ana, te faltan N días." |
+| Vigente, 1 a 3 días | Permitido | Naranja | "…te faltan N días." / "te falta 1 día." |
+| Vence hoy | Permitido | Rojo | "…tu plan vence hoy." |
+| Vencida, próxima, pago anulado, sin membresía, archivado o documento inexistente | Denegado | Rojo (próxima: naranja) | Explica el motivo e indica acercarse a recepción |
+
+- Solo se muestra el primer nombre. El reingreso el mismo día no duplica la asistencia pero sí queda en la bitácora.
+- La apertura de la puerta está **simulada** (`abrir_puerta()` en `apps/access/services.py`); la respuesta incluye `puerta`.
+- La bitácora se conserva 12 meses: `manage.py purgar_bitacora_acceso` elimina lo anterior. Las asistencias no se purgan.
 
 ---
 
@@ -400,7 +422,7 @@ Las operaciones `registrar_pago()` y registro de miembro (`create()`) ocurren de
 
 | Concepto | Regla |
 |----------|-------|
-| Documento único | `(tipo_documento, numero_documento)` no se puede repetir. |
+| Documento único | `numero_documento` no se puede repetir (cualquier tipo). |
 | Membresía vigente | `fecha_inicio <= hoy <= fecha_fin` y sin pagos anulados. |
 | Pago anulado | Se excluye de ingresos e inactiva su membresía; se conserva el historial. |
 | Miembro archivado | No aparece operativamente; historial disponible. |

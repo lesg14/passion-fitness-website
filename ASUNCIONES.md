@@ -6,7 +6,9 @@ Este documento reúne decisiones provisionales e incógnitas que conviene confir
 
 - Se asume que el gimnasio opera en Colombia: los importes se expresan en COP, se manejan documentos colombianos y las fechas de negocio usan `America/Bogota`.
 - El sistema está pensado para uso interno de recepción y administración. No se asume que los miembros tengan acceso al sistema; el campo de usuario asociado al miembro está reservado para un posible portal futuro.
-- Se asume que cada miembro es una persona identificada por un tipo y número de documento. El sistema no define un proceso para fusionar duplicados ni para reutilizar un documento que ya figure en un miembro archivado.
+- Se asume que cada miembro es una persona identificada por un número de documento único, sin importar el tipo (el kiosco de acceso no lo pide). El sistema no define un proceso para fusionar duplicados ni para reutilizar un documento que ya figure en un miembro archivado.
+- Kiosco de acceso: la cédula por sí sola es un secreto débil (cualquiera podría digitar la de otra persona). Se asume que el equipo está a la vista del personal; un PIN, QR o tarjeta queda para una fase posterior. La apertura física está simulada y no se definió el comportamiento sin conexión.
+- El consentimiento de Habeas Data actual no menciona el registro de asistencia; queda pendiente revisarlo con asesoría legal. La bitácora de accesos se conserva 12 meses (ejecutar `purgar_bitacora_acceso` periódicamente).
 - La importación histórica desde Excel aún no está definida. Antes de importar, se deben acordar la correspondencia de columnas, el tratamiento de documentos duplicados, la reconstrucción de períodos y la conciliación de pagos.
 
 ## Pagos y contabilidad
