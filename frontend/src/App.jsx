@@ -28,7 +28,6 @@ import {
 } from 'lucide-react';
 import { apiRequest } from './api.js';
 import brandLogo from './passion-fitness-logo.png';
-import developerLogo from './ls-solutions-logo.png';
 import StaffManagement from './StaffManagement.jsx';
 
 const RevenueChart = lazy(() => import('./RevenueChart.jsx'));
