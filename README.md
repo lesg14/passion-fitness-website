@@ -41,6 +41,8 @@ El sistema diferencia dos perfiles de acceso:
 
 En el resumen de recepción se muestran las membresías que vencen hoy o en los próximos tres días, siempre que el miembro no tenga una membresía operativa con vencimiento posterior. Cada aviso permite abrir la renovación directamente. La gráfica de planes populares permanece visible; el indicador y la gráfica de ingresos solo se muestran en el resumen del administrador. Esta separación es visual: la API del dashboard y el historial de pagos conservan sus permisos actuales.
 
+En el panel principal, **Registrar pago** permite a recepción y administración buscar un miembro no archivado y abrir su formulario de cobro o renovación. Al seleccionar un plan de pareja se abre el formulario de inscripción para las dos personas.
+
 ## Decisiones de arquitectura
 
 El registro de decisiones arquitectónicas está en [`docs/adr/`](docs/adr/README.md).
