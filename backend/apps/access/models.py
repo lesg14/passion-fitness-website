@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
@@ -11,6 +12,9 @@ class Asistencia(models.Model):
     fecha = models.DateField(default=timezone.localdate)
     hora_entrada = models.DateTimeField(default=timezone.now)
     origen = models.CharField(max_length=10, choices=Origen.choices, default=Origen.PUERTA)
+    registrado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
 
     class Meta:
         ordering = ["-fecha", "-hora_entrada"]
@@ -44,6 +48,11 @@ class RegistroAcceso(models.Model):
     motivo = models.CharField(max_length=20, choices=Motivo.choices, blank=True)
     dias_restantes = models.IntegerField(null=True, blank=True)
     dispositivo = models.CharField(max_length=150, blank=True)
+    origen = models.CharField(max_length=10, choices=Asistencia.Origen.choices, default=Asistencia.Origen.PUERTA)
+    registrado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+    usuario_registro = models.CharField(max_length=150, blank=True)
 
     class Meta:
         ordering = ["-fecha_hora"]

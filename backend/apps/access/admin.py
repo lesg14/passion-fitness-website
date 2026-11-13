@@ -16,11 +16,11 @@ class ReadOnlyAdmin(admin.ModelAdmin):
 
 @admin.register(Asistencia)
 class AsistenciaAdmin(ReadOnlyAdmin):
-    list_display = ("member", "fecha", "hora_entrada", "origen")
+    list_display = ("member", "fecha", "hora_entrada", "origen", "registrado_por")
     list_filter = ("origen", "fecha")
 
 
 @admin.register(RegistroAcceso)
 class RegistroAccesoAdmin(ReadOnlyAdmin):
-    list_display = ("fecha_hora", "member", "resultado", "motivo", "dias_restantes")
-    list_filter = ("resultado", "motivo")
+    list_display = ("fecha_hora", "member", "resultado", "motivo", "dias_restantes", "origen", "usuario_registro", "dispositivo")
+    list_filter = ("resultado", "motivo", "origen")

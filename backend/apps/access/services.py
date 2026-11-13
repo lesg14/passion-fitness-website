@@ -66,7 +66,7 @@ def abrir_puerta():
 
 
 @transaction.atomic
-def registrar_ingreso(numero_documento, dispositivo=""):
+def registrar_ingreso(numero_documento, dispositivo="", *, origen=Asistencia.Origen.PUERTA, usuario=None):
     ahora = timezone.now()
     resultado = evaluar_acceso(numero_documento, timezone.localdate(ahora))
     member = resultado["member"]
@@ -78,14 +78,19 @@ def registrar_ingreso(numero_documento, dispositivo=""):
         motivo=resultado["motivo"],
         dias_restantes=resultado["dias_restantes"],
         dispositivo=dispositivo[:150],
+        origen=origen,
+        registrado_por=usuario,
+        usuario_registro=usuario.get_username() if usuario else "",
     )
     if resultado["permitido"]:
-        Asistencia.objects.get_or_create(
+        _, creado = Asistencia.objects.get_or_create(
             member=member,
             fecha=timezone.localdate(ahora),
-            defaults={"hora_entrada": ahora, "origen": Asistencia.Origen.PUERTA},
+            defaults={"hora_entrada": ahora, "origen": origen, "registrado_por": usuario},
         )
-        resultado["puerta"] = abrir_puerta()
+        resultado["asistencia_creada"] = creado
+        resultado["puerta"] = abrir_puerta() if origen == Asistencia.Origen.PUERTA else "no_aplica"
     else:
+        resultado["asistencia_creada"] = False
         resultado["puerta"] = "cerrada"
     return resultado
