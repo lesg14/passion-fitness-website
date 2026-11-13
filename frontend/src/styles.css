@@ -640,3 +640,46 @@ body:has(.login-page) { min-width: 0; }
   .login-hero-eyebrow, .login-hero-description { display: none; }
   .login-hero-title { font-size: 24px; }
 }
+
+/* Kiosco de acceso */
+.kiosk { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: clamp(8px, 2vh, 20px); height: 100vh; height: 100dvh; overflow: hidden; padding: 16px; background: radial-gradient(ellipse at 50% -10%, #ffce2b40 0, transparent 55%), radial-gradient(ellipse at 100% 100%, #ffce2b26 0, transparent 45%), linear-gradient(160deg, #2a2a2a 0, #141414 60%, #0c0c0c 100%); color: #fff; text-align: center; }
+.kiosk::before { position: absolute; inset: 0; background: repeating-linear-gradient(135deg, #ffffff06 0 2px, transparent 2px 28px); content: ''; pointer-events: none; }
+.kiosk > * { position: relative; }
+.kiosk h1 { margin: 0; color: #fff; font-size: clamp(24px, 4.5vh, 44px); letter-spacing: -1px; }
+.kiosk-logo { width: min(60vw, 260px); max-height: 16vh; object-fit: contain; }
+.kiosk-hint { margin: 0; color: #ffce2b; font-size: clamp(14px, 2.4vh, 20px); }
+.kiosk-display { position: relative; display: flex; align-items: center; justify-content: center; min-width: min(90vw, 420px); min-height: clamp(48px, 9vh, 76px); padding: 0 24px; border: 2px solid #ffce2b; border-radius: 12px; background: #ffffff14; box-shadow: 0 0 0 4px #ffce2b26; font-size: clamp(28px, 5vh, 44px); font-weight: 700; letter-spacing: 8px; }
+.kiosk-digits { color: #fff; }
+.kiosk-caret { width: 3px; height: 1.1em; margin-left: 4px; border-radius: 2px; background: #ffce2b; animation: kiosk-blink 1s steps(1) infinite; }
+@keyframes kiosk-blink { 50% { opacity: 0; } }
+.kiosk-pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: clamp(8px, 1.6vh, 14px); width: min(90vw, 420px); }
+.kiosk-key { min-height: clamp(48px, 10vh, 84px); border: 1px solid #ffffff24; border-radius: 12px; background: #2a2a2a; color: #fff; font: 700 clamp(22px, 4vh, 34px) 'Manrope', sans-serif; cursor: pointer; touch-action: manipulation; }
+.kiosk-key:active:not(:disabled) { background: #3a3a3a; }
+.kiosk-key:disabled { opacity: .35; cursor: not-allowed; }
+.kiosk-enter { border-color: #ffce2b; background: #ffce2b; color: #151515; font-size: clamp(16px, 3vh, 24px); }
+.kiosk-toast-wrap { position: fixed; top: clamp(10px, 3vh, 28px); left: 50%; z-index: 10; width: min(94vw, 640px); transform: translateX(-50%); animation: kiosk-toast-in 220ms ease-out both; }
+@keyframes kiosk-toast-in { from { opacity: 0; transform: translate(-50%, -14px); } }
+.kiosk-toast { display: grid; width: 100%; overflow: hidden; padding: 0; border: 0; border-radius: 16px; background: #fff; box-shadow: 0 18px 50px #000000a6; color: #151515; text-align: center; cursor: pointer; font: inherit; }
+.kiosk-toast-head { display: flex; align-items: center; justify-content: center; gap: 10px; padding: clamp(8px, 1.6vh, 14px); color: #fff; font-size: clamp(15px, 2.6vh, 22px); font-weight: 800; letter-spacing: 2px; text-transform: uppercase; }
+.kiosk-toast-ok .kiosk-toast-head { background: #1f8a4c; }
+.kiosk-toast-denied .kiosk-toast-head { background: #c62828; }
+.kiosk-toast-message { padding: clamp(12px, 2.6vh, 26px) clamp(14px, 3vw, 28px) 6px; font-size: clamp(20px, 4vh, 38px); font-weight: 800; line-height: 1.2; }
+.kiosk-msg-verde { color: #1a7a43; }
+.kiosk-msg-naranja { color: #d96c00; }
+.kiosk-msg-rojo { color: #c62828; }
+.kiosk-toast-close { padding: 0 0 clamp(8px, 1.6vh, 14px); color: #8a8a85; font-size: clamp(11px, 1.8vh, 14px); }
+@media (max-height: 520px) and (orientation: landscape) {
+  .kiosk { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto auto auto 1fr; align-content: center; column-gap: 24px; row-gap: 6px; padding: 10px 16px; }
+  .kiosk-logo { grid-column: 1; max-height: 20vh; }
+  .kiosk h1 { grid-column: 1; font-size: clamp(18px, 6vh, 26px); }
+  .kiosk-hint { grid-column: 1; font-size: 13px; }
+  .kiosk-display { grid-column: 1; grid-row: 4; align-self: start; min-width: 0; width: 100%; min-height: 48px; }
+  .kiosk-pad { grid-column: 2; grid-row: 1 / 5; align-self: center; width: 100%; gap: 6px; }
+  .kiosk-key { min-height: clamp(40px, 15vh, 64px); }
+}
+@media (max-width: 380px) { .kiosk-display { letter-spacing: 4px; padding: 0 12px; } }
+.kiosk-login { display: grid; gap: 10px; width: min(90vw, 340px); }
+.kiosk-login p { margin: 0 0 6px; color: #ffce2b; font-weight: 700; }
+.kiosk-login input { min-height: 46px; padding: 0 14px; border: 1px solid #ffffff2e; border-radius: 9px; background: #ffffff0d; color: #fff; font-size: 16px; }
+.kiosk-login button { min-height: 46px; border: 0; border-radius: 9px; background: #ffce2b; color: #151515; font-weight: 800; cursor: pointer; }
+.kiosk-login-error { color: #ff9a9a; font-size: 13px; }

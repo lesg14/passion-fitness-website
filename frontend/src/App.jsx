@@ -375,7 +375,7 @@ function PairRegistrationDialog({ plans, members, initialMember, initialNew, ini
                     </div>
                     <div className="form-row">
                       <label>Tipo de documento<select value={item.nuevo.tipo_documento} onChange={(e) => updateParticipant(index, { nuevo: { ...item.nuevo, tipo_documento: e.target.value } })}><option value="CC">Cédula de ciudadanía</option><option value="CE">Cédula de extranjería</option><option value="TI">Tarjeta de identidad</option><option value="PAS">Pasaporte</option></select></label>
-                      <label>Número de documento<ValidatedMemberInput required inputMode="numeric" pattern="[0-9]{10}" maxLength={10} errorMessage="Ingresa exactamente 10 dígitos." value={item.nuevo.numero_documento} onChange={(e) => updateParticipant(index, { nuevo: { ...item.nuevo, numero_documento: e.target.value } })} /></label>
+                      <label>Número de documento<ValidatedMemberInput required inputMode="numeric" pattern="[0-9]{1,10}" maxLength={10} errorMessage="Ingresa de 1 a 10 dígitos." value={item.nuevo.numero_documento} onChange={(e) => updateParticipant(index, { nuevo: { ...item.nuevo, numero_documento: e.target.value } })} /></label>
                     </div>
                     <div className="form-row">
                       <label>Teléfono (opcional)<ValidatedMemberInput inputMode="numeric" pattern="[0-9]{10}" maxLength={10} errorMessage="Ingresa exactamente 10 dígitos." value={item.nuevo.telefono} onChange={(e) => updateParticipant(index, { nuevo: { ...item.nuevo, telefono: e.target.value } })} /></label>
@@ -508,7 +508,7 @@ function MemberDialog({ plans, members, onClose, onAdd, onPairSuccess }) {
             </label>
             <label>
               Número de documento
-              <ValidatedMemberInput required inputMode="numeric" pattern="[0-9]{10}" maxLength={10} title="Ingresa exactamente 10 dígitos numéricos." errorMessage="Ingresa exactamente 10 dígitos, sin letras ni símbolos." value={form.numero_documento} onChange={update('numero_documento')} />
+              <ValidatedMemberInput required inputMode="numeric" pattern="[0-9]{1,10}" maxLength={10} title="Ingresa de 1 a 10 dígitos numéricos." errorMessage="Ingresa de 1 a 10 dígitos, sin letras ni símbolos." value={form.numero_documento} onChange={update('numero_documento')} />
             </label>
           </div>
           <div className="form-row">
@@ -848,7 +848,7 @@ function EditMemberDialog({ member, onClose, onSuccess }) {
             </label>
             <label>
               Número de documento
-              <ValidatedMemberInput required inputMode="numeric" pattern="[0-9]{10}" maxLength={10} title="Ingresa exactamente 10 dígitos numéricos." errorMessage="Ingresa exactamente 10 dígitos, sin letras ni símbolos." value={form.numero_documento} onChange={update('numero_documento')} />
+              <ValidatedMemberInput required inputMode="numeric" pattern="[0-9]{1,10}" maxLength={10} title="Ingresa de 1 a 10 dígitos numéricos." errorMessage="Ingresa de 1 a 10 dígitos, sin letras ni símbolos." value={form.numero_documento} onChange={update('numero_documento')} />
             </label>
           </div>
           <div className="form-row">
@@ -2537,7 +2537,7 @@ export default function App() {
       try {
         await apiRequest('/auth/csrf/');
         const session = await apiRequest('/auth/session/');
-        if (active) setUser(session);
+        if (active && session.role !== 'door') setUser(session);
       } catch (error) {
         if (active && error.status !== 401) setConnectionError(error.message || 'No se pudo conectar con Django.');
       } finally {
