@@ -1,11 +1,13 @@
 from django.urls import path
 
-from apps.access.api import CheckInView, TodayAccessView
+from apps.access.api import CheckInView, ManualCheckInView, TodayAccessView
 
 from .api import (
     AdminProfileView,
     CsrfView,
     DashboardView,
+    DoorAccountDetailView,
+    DoorAccountListCreateView,
     LoginView,
     LogoutView,
     MemberDetailView,
@@ -31,6 +33,8 @@ urlpatterns = [
     path('dashboard/', DashboardView.as_view(), name='api-dashboard'),
     path('staff/', ReceptionistListCreateView.as_view(), name='api-staff'),
     path('staff/<int:pk>/', ReceptionistDetailView.as_view(), name='api-staff-detail'),
+    path('door-accounts/', DoorAccountListCreateView.as_view(), name='api-door-accounts'),
+    path('door-accounts/<int:pk>/', DoorAccountDetailView.as_view(), name='api-door-account-detail'),
     path('plans/', PlanListCreateView.as_view(), name='api-plans'),
     path('plans/<int:pk>/', PlanDetailView.as_view(), name='api-plan-detail'),
     path('members/', MemberListCreateView.as_view(), name='api-members'),
@@ -41,5 +45,6 @@ urlpatterns = [
     path('pair-registrations/', PairRegistrationView.as_view(), name='api-pair-registration'),
     path('payments/<int:pk>/void/', PaymentVoidView.as_view(), name='api-payment-void'),
     path('access/check-in/', CheckInView.as_view(), name='api-access-check-in'),
+    path('access/manual/', ManualCheckInView.as_view(), name='api-access-manual'),
     path('access/today/', TodayAccessView.as_view(), name='api-access-today'),
 ]

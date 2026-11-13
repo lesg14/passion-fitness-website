@@ -3,6 +3,7 @@ from collections.abc import Mapping
 from uuid import uuid4
 
 from django.contrib.auth import authenticate, get_user_model, login, logout, update_session_auth_hash
+from django.contrib.auth.models import Group
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
@@ -18,6 +19,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.access.api import es_cuenta_puerta
+from apps.access.services import DOOR_GROUP
 from apps.billing.models import Membership, Payment, registrar_pago
 from apps.dashboard.views import calcular_estadisticas
 from apps.members.models import Member
@@ -113,6 +115,41 @@ class ReceptionistDetailView(generics.RetrieveUpdateAPIView):
 
     def get_queryset(self):
         return get_user_model().objects.filter(is_staff=True, is_superuser=False)
+
+
+class DoorAccountSerializer(ReceptionistSerializer):
+    class Meta:
+        model = get_user_model()
+        fields = ('id', 'username', 'is_active', 'password')
+        read_only_fields = ('id',)
+
+    @transaction.atomic
+    def create(self, validated_data):
+        password = validated_data.pop('password')
+        user = get_user_model().objects.create_user(password=password, **validated_data)
+        user.groups.add(Group.objects.get_or_create(name=DOOR_GROUP)[0])
+        return user
+
+
+class DoorAccountListCreateView(generics.ListCreateAPIView):
+    permission_classes = [IsAdminRole]
+    serializer_class = DoorAccountSerializer
+
+    def get_queryset(self):
+        return get_user_model().objects.filter(
+            groups__name=DOOR_GROUP, is_staff=False, is_superuser=False
+        ).order_by('username', 'pk')
+
+
+class DoorAccountDetailView(generics.RetrieveUpdateAPIView):
+    permission_classes = [IsAdminRole]
+    serializer_class = DoorAccountSerializer
+    http_method_names = ['get', 'patch', 'head', 'options']
+
+    def get_queryset(self):
+        return get_user_model().objects.filter(
+            groups__name=DOOR_GROUP, is_staff=False, is_superuser=False
+        )
 
 
 class AdminProfileSerializer(ReceptionistSerializer):
