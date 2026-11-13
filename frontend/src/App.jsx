@@ -19,7 +19,6 @@ import {
   Plus,
   Receipt,
   Search,
-  Settings2,
   ShieldCheck,
   SlidersHorizontal,
   Trash2,
