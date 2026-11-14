@@ -99,6 +99,20 @@ Abre `/acceso` en el equipo de la entrada, activa el dispositivo con esa cuenta 
 
 En **Ingresos y bitácora**, recepción y administración pueden buscar un miembro y registrar su ingreso manual en línea. Se aplican las mismas reglas de vigencia que en el kiosco; no se abre la puerta, no se crean pagos ni se modifican membresías. Cada intento queda auditado con el usuario responsable, y los reingresos no duplican la asistencia diaria. La pantalla muestra el día actual y permite consultar otra fecha; recepción no ve registros asociados a miembros archivados. Ejecuta `migrate` al actualizar para incorporar los campos de auditoría. Si el servidor o la base de datos no están disponibles, esta función no opera fuera de línea.
 
+## Portal de miembros
+
+Los miembros pueden iniciar sesión seleccionando **Miembro**. En el entorno de pruebas, prepara todas las cuentas ejecutando desde `backend`:
+
+```powershell
+..\.venv\Scripts\python manage.py crear_credenciales_miembros
+```
+
+El comando vincula cada miembro con un usuario activo usando el número de identificación como usuario y contraseña. Es idempotente y actualiza la contraseña de las cuentas de miembro vinculadas; no toma control de cuentas staff, administradoras o de puerta. **Estas credenciales son únicamente para pruebas y deben reemplazarse antes de usar datos reales.** Una cuenta archivada no puede iniciar sesión. El portal muestra el plan vigente y días restantes, un calendario mensual de asistencia, el porcentaje del mes actual y la racha de asistencias. Los domingos se marcan como cerrados; los lunes festivos siguen siendo días operativos. La racha cuenta días operativos consecutivos con asistencia y se activa desde tres días.
+
+El histórico de pagos del portal es de solo lectura y muestra fecha, valor, método y referencia de pagos no anulados. Si la última membresía está vencida o vence dentro de los próximos 3 días, el portal muestra una alerta: «vence hoy», «vence mañana» o «vence dentro de 2/3 días», indicando que debe renovarse en recepción. El endpoint privado es `GET /api/member/portal/`; las cuentas de miembro no pueden consultar los endpoints operativos de recepción ni modificar pagos, miembros o membresías.
+
+Para una cuenta individual también se puede crear o seleccionar un usuario en **Django Admin → Usuarios**, sin otorgarle `is_staff` ni `is_superuser`, y después vincularlo desde **Django Admin → Members**. Cada usuario debe vincularse a un solo miembro.
+
 ## PostgreSQL
 
 El desarrollo local usa SQLite por defecto. Para preparar PostgreSQL 18 local:

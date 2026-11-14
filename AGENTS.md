@@ -43,6 +43,7 @@ Oferta de membresía disponible.
 - El nombre del plan debe ser único.
 - Un plan desactivado no se muestra en listas para recepción; solo administradores ven planes inactivos.
 - La duración debe ser ≥ 1 día.
+- La duración no se puede modificar cuando el plan ya tiene membresías registradas; las membresías existentes conservan siempre sus fechas.
 - El precio debe ser ≥ 1 COP.
 - Un plan con membresías activas no se puede eliminar físicamente; se desactiva lógicamente (`activo = false`).
 
@@ -65,10 +66,10 @@ Período de validez de una membresía para un miembro en un plan.
 - `fecha_fin ≥ fecha_inicio` siempre.
 - Una membresía se considera vigente si `fecha_inicio <= hoy <= fecha_fin` y no tiene pagos anulados (zona horaria: `America/Bogota`).
 - La API crea una membresía con un pago y permite modificar sus fechas únicamente mediante las operaciones de congelación y corrección de inicio.
+- Las membresías operativas de un mismo miembro no pueden solaparse; los pagos, congelaciones y correcciones de inicio que produzcan solapamientos son rechazados.
 - El administrador puede congelar una membresía vigente una sola vez; la congelación añade cinco días calendario a `fecha_fin`.
 - Recepción o administración pueden corregir `fecha_inicio` de membresías individuales; `fecha_fin` se desplaza la misma cantidad de días, conservando la duración y la congelación ya aplicada. Las membresías de pareja no permiten esta corrección.
-- Estas operaciones no crean pagos ni modifican otras membresías; podrían producir solapamientos con renovaciones existentes.
-- El sistema permite múltiples membresías simultáneas para un miembro (aunque operativamente se usa la más reciente).
+- Estas operaciones no crean pagos ni modifican otras membresías.
 
 ---
 
@@ -236,6 +237,7 @@ Operaciones permitidas:
 4. Crea `Payment(member, membership, monto_cop, metodo, fecha, referencia, usuario)`.
 
 **Restricción:** Ambas operaciones (crear membresía y pago) ocurren en una transacción; si una falla, ambas se revierten.
+- En los formularios web de registro y renovación, el calendario solo permite hoy o una fecha posterior; si el miembro tiene una membresía vigente o futura, el mínimo es el día posterior a su `fecha_fin`.
 
 **Salida:** `Payment` con su `Membership`.
 
@@ -339,6 +341,17 @@ Operaciones permitidas:
 - Si solicita `role: admin`, debe tener `is_superuser = true`.
 - Las credenciales incorrectas devuelven error 400.
 - La falta de permisos para el rol devuelve error 403.
+
+### Portal de miembros
+
+- Las cuentas de miembros usan usuarios Django activos vinculados uno a uno mediante `Member.user`; no son cuentas `is_staff` ni `is_superuser`.
+- El login acepta `role: "member"` únicamente para un miembro vinculado y no archivado.
+- `GET /api/member/portal/` devuelve únicamente al miembro autenticado su plan vigente, días restantes, asistencia mensual, porcentaje, racha y pagos no anulados.
+- `GET /api/member/portal/?month=AAAA-MM` permite consultar cualquier mes del calendario de asistencia; el portal permite navegar entre meses anteriores y hasta el mes actual.
+- Si la última membresía operativa terminó antes de hoy, el portal devuelve `estado: "vencida"` y un mensaje de renovación; la interfaz muestra una alerta y no crea pagos automáticamente.
+- Si la membresía vigente vence hoy, mañana o dentro de 2/3 días, el portal devuelve `estado: "vence_hoy"`, `"vence_1_dia"`, `"vence_2_dias"` o `"vence_3_dias"` con el mensaje correspondiente de renovación; la interfaz también muestra una alerta.
+- El calendario considera los domingos como días cerrados y todos los demás días como operativos, incluidos los lunes festivos. Los pagos mostrados son de solo lectura: fecha, monto, método y referencia.
+- La racha se calcula con asistencias consecutivas en días operativos y se activa desde tres días; omite los domingos sin romper la continuidad.
 
 **Salida:** Token CSRF, rol confirmado, datos del usuario.
 
