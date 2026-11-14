@@ -130,8 +130,73 @@ button { color: inherit; }
 .plan-list { display: grid; gap: 18px; margin-top: 22px; }.plan-item-heading { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 7px; color: #667066; font-size: 10px; }.plan-item-heading strong { color: #344238; font-size: 10px; }.plan-track { height: 6px; overflow: hidden; border-radius: 6px; background: #edf1eb; }.plan-track i { height: 100%; display: block; border-radius: inherit; background: linear-gradient(90deg, #76a98a, #c3d9a3); }.empty-plans { margin: 25px 0; color: #929990; font-size: 11px; line-height: 1.6; }.status-inactive { color: #7e7772; background: #f0efed; }
 @media (max-width: 520px) { .login-panel { padding: 25px 21px; }.form-row { grid-template-columns: 1fr; gap: 12px; }.dialog { padding: 19px; }.member-form { gap: 12px; } }
 /* Login role tabs */
-.login-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 4px; background: #eff3ee; border-radius: 7px; margin-bottom: 20px; }
+.login-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 4px; background: #eff3ee; border-radius: 7px; margin-bottom: 20px; }
 .login-tab { border: 0; background: transparent; padding: 8px 10px; font-size: 11px; font-weight: 600; color: #5f6e62; border-radius: 5px; cursor: pointer; transition: all 150ms ease; display: flex; align-items: center; justify-content: center; gap: 6px; }
+
+.member-portal { min-height: 100vh; background: #f5f6f2; color: var(--ink); }
+.member-portal-header { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 28px max(24px, 6vw); border-bottom: 1px solid #e8ebe5; background: #fff; }
+.member-portal-header h1 { margin-bottom: 6px; }
+.member-portal-content { max-width: 1280px; margin: 0 auto; padding: 30px max(24px, 5vw); }
+.member-expired-alert { display: flex; justify-content: space-between; align-items: center; gap: 18px; margin-bottom: 16px; padding: 15px 18px; border: 1px solid #efc8bf; border-left: 4px solid #d86f58; border-radius: 8px; color: #85483c; background: #fff5f1; }
+.member-expired-alert strong { display: block; margin-bottom: 4px; font-size: 13px; }.member-expired-alert p { margin: 0; font-size: 11px; line-height: 1.5; }.member-expired-alert > span { flex: 0 0 auto; color: #a45b4b; font-size: 10px; font-weight: 600; }
+.member-expired-alert:not(.urgent) { border-color: #ead7bd; border-left-color: #d39a55; color: #80603d; background: #fffaf1; }.member-expired-alert:not(.urgent) > span { color: #9a7445; }
+.member-portal-metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 16px; }
+.member-portal-card, .member-portal-panel { border: 1px solid #e8ebe5; border-radius: 9px; background: #fff; }
+.member-portal-card { display: grid; grid-template-columns: auto 1fr; column-gap: 10px; align-items: center; padding: 18px; color: #578267; }
+.member-portal-card span { color: #788378; font-size: 11px; }
+.member-portal-card strong { grid-column: 2; color: #29372d; font: 700 25px 'Manrope', sans-serif; }
+.member-portal-card small { grid-column: 2; color: #9aa198; font-size: 10px; }
+.member-portal-card.streak-active { border-color: #d3e6bd; background: #fbfdf8; }
+.member-portal-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(360px, .8fr); gap: 16px; }
+.member-portal-panel { padding: 20px; }
+.member-portal-panel-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 18px; }
+.member-portal-panel-heading h2 { font-size: 18px; text-transform: capitalize; }
+.member-calendar-note, .member-readonly-note { color: #899289; font-size: 10px; line-height: 1.5; }
+.member-calendar-navigation { display: flex; gap: 5px; }
+.member-calendar-current { width: auto; height: 30px; min-height: 30px; padding: 0 9px; font-size: 10px; }
+.member-calendar-navigation .icon-button { width: 30px; height: 30px; }
+.member-calendar-navigation .icon-button:disabled { opacity: .4; cursor: not-allowed; }
+.member-calendar-legend { display: flex; gap: 10px; color: #7d887e; font-size: 10px; }
+.member-calendar-legend span { display: inline-flex; align-items: center; gap: 4px; }
+.member-calendar-legend span:first-child { color: #4a8b61; }.member-calendar-legend span:last-child { color: #c26464; }
+.member-calendar-weekdays, .member-calendar { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.member-calendar-weekdays { margin: 18px 0 7px; color: #929990; font-size: 10px; text-align: center; }
+.member-calendar-day, .member-calendar-empty { min-height: 58px; display: grid; place-items: center; align-content: center; gap: 3px; border: 1px solid #edf0eb; border-radius: 6px; color: #657166; font-size: 11px; }
+.member-calendar-day b { font-size: 11px; font-weight: 600; }.member-calendar-day svg { stroke-width: 2.5; }
+.member-calendar-day.asistio { border-color: #cde4d1; color: #41845a; background: #f0f8f1; }
+.member-calendar-day.falto { border-color: #f0d7d2; color: #bd5f5f; background: #fff5f3; }
+.member-calendar-day.cerrado { color: #adb4ad; background: #f4f5f2; }.member-calendar-day.cerrado small { font-size: 8px; }
+.member-calendar-day.futuro, .member-calendar-day.no_aplica { color: #b0b7b0; background: #fcfcfb; }
+.member-payments-table-wrap { overflow-x: auto; }.member-payments-table { min-width: 430px; }.member-payments-table td { height: 48px; }
+.member-portal-footer { padding: 0 max(24px, 6vw) 24px; color: #9aa198; font-size: 10px; }
+@media (max-width: 800px) { .member-portal-header { align-items: flex-start; flex-direction: column; }.member-portal-metrics, .member-portal-grid { grid-template-columns: 1fr; }.member-portal-content { padding: 22px 15px; }.member-portal-panel { padding: 15px; }.member-expired-alert { align-items: flex-start; flex-direction: column; gap: 8px; } }
+@media (max-width: 430px) { .login-tabs { grid-template-columns: 1fr; }.member-calendar-weekdays, .member-calendar { gap: 3px; }.member-calendar-day, .member-calendar-empty { min-height: 45px; }.member-calendar-note { font-size: 9px; } }
+@media (max-width: 600px) {
+  .member-portal-header { padding: 21px 16px; }
+  .member-portal-header h1 { font-size: 24px; }
+  .member-portal-header .button { width: 100%; }
+  .member-portal-content { padding: 17px 11px 24px; }
+  .member-portal-card { min-height: 94px; padding: 14px; }
+  .member-portal-card strong { font-size: 22px; }
+  .member-portal-panel { padding: 13px 10px; }
+  .member-portal-panel-heading { align-items: flex-start; flex-direction: column; gap: 9px; margin-bottom: 13px; }
+  .member-calendar-legend { width: 100%; justify-content: flex-start; }
+  .member-calendar-weekdays, .member-calendar { gap: 3px; }
+  .member-calendar-day, .member-calendar-empty { min-height: 42px; border-radius: 5px; }
+  .member-calendar-day b { font-size: 10px; }
+  .member-calendar-day svg { width: 13px; height: 13px; }
+  .member-calendar-day.cerrado small { display: none; }
+  .member-payments-table-wrap { overflow: visible; }
+  .member-payments-table { min-width: 0; display: block; }
+  .member-payments-table thead { display: none; }
+  .member-payments-table tbody { display: grid; gap: 8px; }
+  .member-payments-table tbody tr { display: grid; grid-template-columns: 1fr 1fr; gap: 9px 14px; padding: 12px 0; border-bottom: 1px solid #efefec; }
+  .member-payments-table tbody tr:last-child { border-bottom: 0; }
+  .member-payments-table tbody td { display: grid; grid-template-columns: 1fr; gap: 3px; height: auto; padding: 0; border: 0; font-size: 11px; white-space: normal; overflow-wrap: anywhere; }
+  .member-payments-table tbody td::before { content: attr(data-label); color: #8a8a85; font-size: 9px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; }
+  .member-payments-table tbody .empty-state { display: table-cell; grid-column: 1 / -1; height: 55px; }
+  .member-portal-footer { padding: 0 16px 18px; line-height: 1.5; }
+}
 .login-tab.active { background: #fff; color: #1e352b; box-shadow: 0 1px 4px #00000018; }
 .role-pill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 12px; font-size: 9px; font-weight: 700; letter-spacing: 0.5px; }
 .role-pill.admin { background: #fdf2d8; color: #825b0e; border: 1px solid #f6deb3; }

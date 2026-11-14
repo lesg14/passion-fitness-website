@@ -30,6 +30,7 @@ import { apiRequest } from './api.js';
 import brandLogo from './passion-fitness-logo.png';
 import StaffManagement from './StaffManagement.jsx';
 import AccessManagement from './AccessManagement.jsx';
+import MemberPortal from './MemberPortal.jsx';
 import { matchesMemberSearch } from './memberSearch.js';
 
 const RevenueChart = lazy(() => import('./RevenueChart.jsx'));
@@ -237,7 +238,7 @@ function CurrentDateTime() {
 }
 
 function LoginScreen({ onLogin, connectionError }) {
-  const [role, setRole] = useState('admin');
+  const [role, setRole] = useState('member');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -273,7 +274,7 @@ function LoginScreen({ onLogin, connectionError }) {
         </div>
       </aside>
       <section className="login-panel">
-        <p className="login-kicker">{role === 'admin' ? 'PANEL ADMINISTRATIVO' : 'PANEL DE RECEPCIÓN'}</p>
+        <p className="login-kicker">{role === 'admin' ? 'PANEL ADMINISTRATIVO' : role === 'member' ? 'PORTAL DE MIEMBROS' : 'PANEL DE RECEPCIÓN'}</p>
         <h1>Bienvenido de vuelta</h1>
         <p className="login-description">Ingresa tus datos para acceder a tu Gimnasio.</p>
 
@@ -295,6 +296,15 @@ function LoginScreen({ onLogin, connectionError }) {
             onClick={() => setRole('admin')}
           >
             <ShieldCheck size={14} /> Administrador
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={role === 'member'}
+            className={`login-tab ${role === 'member' ? 'active' : ''}`}
+            onClick={() => setRole('member')}
+          >
+            <Users size={14} /> Miembro
           </button>
         </div>
 
@@ -520,7 +530,7 @@ function PairRegistrationDialog({ plans, members, initialMember, initialNew, ini
               </fieldset>
             );
           })}
-          <label>Fecha de inicio común<input type="date" required min={minimum} value={start} onChange={(event) => setStart(event.target.value)} /></label>
+          <label>Fecha de inicio común<input type="date" required min={minimum || getBogotaTodayString()} value={start} onChange={(event) => setStart(event.target.value)} /></label>
           <p>{minimum ? `Inicio mínimo: ${formatDate(minimum)}. ` : ''}Final: {formatDate(plan ? addDaysToDate(start, plan.duracion_dias) : '')}. Total: {formatCurrency((plan?.precio_cop || 0) * 2)}.</p>
           <p>Los pagos no se pueden anular ni corregir sus fechas de inicio. Cada persona puede congelar su membresía independientemente.</p>
           <div className="dialog-actions"><button type="button" className="button button-quiet" onClick={onClose} disabled={busy}>Cancelar</button><button type="submit" className="button button-primary" disabled={busy || !plan}>{busy ? 'Guardando…' : 'Registrar pareja'}</button></div>
@@ -676,6 +686,7 @@ function MemberDialog({ plans, members, onClose, onAdd, onPairSuccess }) {
               <input
                 type="date"
                 required
+                min={getBogotaTodayString()}
                 value={form.fecha_inicio}
                 onChange={update('fecha_inicio')}
               />
@@ -761,7 +772,7 @@ function RenewPaymentDialog({ member, plans, members, onClose, onSuccess }) {
   const [metodo, setMetodo] = useState('efectivo');
   const [referencia, setReferencia] = useState('');
 
-  const todayStr = getTodayString();
+  const todayStr = getBogotaTodayString();
   const defaultStartDate = useMemo(() => {
     if (member?.fecha_fin && member.fecha_fin >= todayStr) {
       return getTomorrowOrNextDayString(member.fecha_fin);
@@ -866,6 +877,7 @@ function RenewPaymentDialog({ member, plans, members, onClose, onSuccess }) {
               <input
                 type="date"
                 required
+                min={defaultStartDate}
                 value={fechaInicio}
                 onChange={(event) => setFechaInicio(event.target.value)}
               />
@@ -2699,6 +2711,7 @@ export default function App() {
     async function loadData() {
       setDataError('');
       try {
+        if (user.role === 'member') return;
         const [summary, memberList, activePlans] = await Promise.all([
           apiRequest(`/dashboard/?months=${period}`),
           apiRequest(user.is_superuser ? '/members/?include_archived=true' : '/members/'),
@@ -2795,6 +2808,9 @@ export default function App() {
 
   const metrics = dashboard?.metrics;
   const isAdmin = user.role === 'admin';
+  if (user.role === 'member') {
+    return <MemberPortal user={user} onLogout={() => { setUser(null); setConnectionError(''); }} />;
+  }
 
   return (
     <div className={`app-shell ${desktopMenuCollapsed ? 'desktop-menu-collapsed' : ''}`}>
