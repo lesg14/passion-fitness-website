@@ -18,7 +18,7 @@ class MemberAdminForm(forms.ModelForm):
 @admin.register(Member)
 class MemberAdmin(admin.ModelAdmin):
     form = MemberAdminForm
-    list_display = ("__str__", "tipo_documento", "numero_documento", "telefono", "esta_activo", "archivado")
+    list_display = ("__str__", "tipo_documento", "numero_documento", "telefono", "user", "esta_activo", "archivado")
     search_fields = ("nombres", "apellidos", "numero_documento", "telefono", "email")
     list_filter = ("tipo_documento", "archivado")
     actions = ("archivar_miembros", "restaurar_miembros")
