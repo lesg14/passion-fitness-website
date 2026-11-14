@@ -13,6 +13,10 @@ class MembershipQuerySet(models.QuerySet):
         )
 
 
+class MembershipOverlapError(ValueError):
+    """Raised when a new operational membership overlaps an existing one."""
+
+
 class Membership(models.Model):
     member = models.ForeignKey("members.Member", on_delete=models.PROTECT, related_name="memberships")
     plan = models.ForeignKey("plans.Plan", on_delete=models.PROTECT, related_name="memberships")
@@ -75,8 +79,16 @@ def registrar_pago(member, plan, metodo, monto_cop=None, fecha=None, referencia=
     else:
         ultima = member.memberships.operativas().filter(fecha_fin__gte=fecha).order_by("-fecha_fin").first()
         inicio = ultima.fecha_fin + timedelta(days=1) if ultima else fecha
+    fin = inicio + timedelta(days=plan.duracion_dias - 1)
+    if member.memberships.operativas().filter(
+        fecha_inicio__lte=fin,
+        fecha_fin__gte=inicio,
+    ).exists():
+        raise MembershipOverlapError(
+            'La nueva membresía se cruza con otra membresía operativa del miembro.'
+        )
     membership = Membership.objects.create(
-        member=member, plan=plan, fecha_inicio=inicio, fecha_fin=inicio + timedelta(days=plan.duracion_dias - 1),
+        member=member, plan=plan, fecha_inicio=inicio, fecha_fin=fin,
         es_pareja=plan.es_pareja, grupo_pareja=grupo_pareja,
     )
     return Payment.objects.create(
