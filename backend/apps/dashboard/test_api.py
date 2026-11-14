@@ -318,6 +318,30 @@ class DashboardApiTests(TestCase):
         self.assertEqual(member_resp[0]['plan'], 'Tradicional')
         self.assertEqual(member_resp[0]['fecha_inicio'], custom_date)
 
+    def test_payment_endpoint_rejects_overlapping_membership(self):
+        existing = registrar_pago(
+            self.member,
+            self.plan,
+            'efectivo',
+            fecha_inicio=self.hoy,
+        )
+        self.client.force_login(self.staff)
+        response = self.client.post(
+            '/api/payments/',
+            data=json.dumps({
+                'member_id': self.member.id,
+                'plan_id': self.plan.id,
+                'metodo': 'nequi',
+                'fecha_inicio': (self.hoy + timedelta(days=5)).isoformat(),
+            }),
+            content_type='application/json',
+            HTTP_X_CSRFTOKEN=self.csrf_token(),
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('fecha_inicio', response.json())
+        self.assertEqual(Payment.objects.count(), 1)
+        self.assertEqual(Payment.objects.get().id, existing.id)
+
     def test_payment_list_and_filter_by_member(self):
         registrar_pago(self.member, self.plan, 'efectivo')
         self.client.force_login(self.staff)
@@ -640,6 +664,25 @@ class DashboardApiTests(TestCase):
         )
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json()['precio_cop'], 210000)
+
+    def test_admin_cannot_change_duration_of_plan_with_memberships(self):
+        self.client.force_login(self.admin)
+        membership = Membership.objects.create(
+            member=self.member,
+            plan=self.plan,
+            fecha_inicio=self.hoy,
+            fecha_fin=self.hoy + timedelta(days=29),
+        )
+        response = self.client.patch(
+            f'/api/plans/{self.plan.id}/',
+            data=json.dumps({'duracion_dias': 1}),
+            content_type='application/json',
+            HTTP_X_CSRFTOKEN=self.csrf_token(),
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('duración', response.json()['duracion_dias'][0])
+        membership.refresh_from_db()
+        self.assertEqual(membership.fecha_fin, self.hoy + timedelta(days=29))
 
     def test_admin_can_edit_and_delete_member(self):
         token = self.csrf_token()

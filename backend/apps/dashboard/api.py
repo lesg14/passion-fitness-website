@@ -1,4 +1,5 @@
-﻿from datetime import timedelta
+import calendar
+from datetime import date, datetime, timedelta
 from collections.abc import Mapping
 from uuid import uuid4
 
@@ -20,7 +21,7 @@ from rest_framework.views import APIView
 
 from apps.access.api import es_cuenta_puerta
 from apps.access.services import DOOR_GROUP
-from apps.billing.models import Membership, Payment, registrar_pago
+from apps.billing.models import Membership, MembershipOverlapError, Payment, registrar_pago
 from apps.dashboard.views import calcular_estadisticas
 from apps.members.models import Member
 from apps.members.validators import validate_birth_date, validate_document_number, validate_ten_digits
@@ -32,6 +33,17 @@ class IsAdminRole(BasePermission):
 
     def has_permission(self, request, view):
         return bool(request.user and request.user.is_authenticated and request.user.is_superuser)
+
+
+class IsMemberRole(BasePermission):
+    message = 'Se requiere una cuenta de miembro.'
+
+    def has_permission(self, request, view):
+        member = getattr(request.user, 'member', None)
+        return bool(
+            request.user and request.user.is_authenticated and request.user.is_active
+            and member and not member.archivado
+        )
 
 
 class ReceptionistSerializer(serializers.ModelSerializer):
@@ -211,7 +223,7 @@ class LoginView(APIView):
     def post(self, request):
         username = request.data.get('username', '').strip()
         password = request.data.get('password', '')
-        requested_role = request.data.get('role')
+        requested_role = request.data.get('role') or 'staff'
 
         User = get_user_model()
         auth_username = username
@@ -226,9 +238,22 @@ class LoginView(APIView):
 
         user = authenticate(request, username=auth_username, password=password)
         is_door = es_cuenta_puerta(user)
+        member = getattr(user, 'member', None) if user else None
+        is_member = bool(member and not member.archivado and not user.is_staff and not user.is_superuser and not is_door)
         if user is None or not user.is_active or not (user.is_staff or user.is_superuser or is_door):
+            if not (user and user.is_active and is_member):
+                return Response(
+                    {'detail': 'Usuario o contraseña incorrectos.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        if requested_role == 'member' and not is_member:
             return Response(
-                {'detail': 'Usuario o contraseña incorrectos.'},
+                {'detail': 'Esta cuenta no corresponde a un miembro activo.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if requested_role not in ('member', 'door', 'staff', 'admin'):
+            return Response(
+                {'detail': 'Selecciona un tipo de acceso válido.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         if (requested_role == 'door') != is_door:
@@ -241,6 +266,11 @@ class LoginView(APIView):
                 {'detail': 'Esta cuenta no tiene permisos de Administrador.'},
                 status=status.HTTP_403_FORBIDDEN,
             )
+        if requested_role == 'staff' and (not user.is_staff or is_door or is_member):
+            return Response(
+                {'detail': 'Esta cuenta no corresponde al acceso de recepción.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         login(request, user)
         new_csrf = get_token(request)
         return Response({
@@ -248,7 +278,8 @@ class LoginView(APIView):
             'first_name': user.first_name,
             'is_staff': user.is_staff,
             'is_superuser': user.is_superuser,
-            'role': 'door' if is_door else 'admin' if user.is_superuser else 'staff',
+            'role': 'member' if is_member else 'door' if is_door else 'admin' if user.is_superuser else 'staff',
+            'member_id': member.pk if is_member else None,
             'csrfToken': new_csrf,
         })
 
@@ -269,6 +300,19 @@ class SessionView(APIView):
                 'role': 'door',
                 'csrfToken': get_token(request),
             })
+        member = getattr(request.user, 'member', None)
+        if member and not request.user.is_staff and not request.user.is_superuser:
+            if member.archivado:
+                return Response({'detail': 'La cuenta del miembro está archivada.'}, status=status.HTTP_403_FORBIDDEN)
+            return Response({
+                'username': request.user.get_username(),
+                'first_name': request.user.first_name,
+                'is_staff': False,
+                'is_superuser': False,
+                'role': 'member',
+                'member_id': member.pk,
+                'csrfToken': get_token(request),
+            })
         if not (request.user.is_staff or request.user.is_superuser):
             return Response({'detail': 'Se requiere una cuenta de staff o administrador.'}, status=status.HTTP_403_FORBIDDEN)
         return Response({
@@ -287,6 +331,161 @@ class LogoutView(APIView):
     def post(self, request):
         logout(request)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class MemberPortalView(APIView):
+    permission_classes = [IsMemberRole]
+
+    def get(self, request):
+        member = request.user.member
+        today = timezone.localdate()
+        month_value = request.query_params.get('month')
+        if month_value:
+            try:
+                selected_month = datetime.strptime(month_value, '%Y-%m').date()
+            except ValueError:
+                return Response(
+                    {'detail': 'El mes debe tener el formato AAAA-MM.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            month_start = selected_month.replace(day=1)
+        else:
+            month_start = today.replace(day=1)
+        days_in_month = calendar.monthrange(month_start.year, month_start.month)[1]
+        month_end = month_start.replace(day=days_in_month)
+        operational_days = [
+            month_start + timedelta(days=offset)
+            for offset in range(days_in_month)
+            if (month_start + timedelta(days=offset)).weekday() != 6
+        ]
+        attendances = set(
+            member.asistencias.filter(fecha__gte=month_start, fecha__lte=month_end)
+            .values_list('fecha', flat=True)
+        )
+        memberships = list(
+            member.memberships.operativas().filter(
+                fecha_inicio__lte=month_end, fecha_fin__gte=month_start
+            ).values_list('fecha_inicio', 'fecha_fin')
+        )
+
+        def covered(day, intervals=memberships):
+            return any(start <= day <= end for start, end in intervals)
+
+        calendar_days = []
+        for day in operational_days:
+            attended = day in attendances
+            expected = day <= today and covered(day)
+            calendar_days.append({
+                'fecha': day.isoformat(),
+                'estado': 'asistio' if attended else 'falto' if expected else 'futuro' if day > today else 'no_aplica',
+            })
+        calendar_days.extend(
+            {
+                'fecha': (month_start + timedelta(days=offset)).isoformat(),
+                'estado': 'cerrado',
+            }
+            for offset in range(days_in_month)
+            if (month_start + timedelta(days=offset)).weekday() == 6
+        )
+        calendar_days.sort(key=lambda item: item['fecha'])
+        elapsed_expected = [day for day in operational_days if day <= today and covered(day)]
+        attended_count = sum(day in attendances for day in elapsed_expected)
+
+        latest_membership = member.memberships.operativas().select_related('plan').first()
+        remaining_days = None
+        membership_status = 'sin_membresia'
+        membership_message = 'No tienes una membresía vigente.'
+        if latest_membership:
+            remaining_days = (latest_membership.fecha_fin - today).days
+            if latest_membership.fecha_inicio > today:
+                membership_status = 'proxima'
+                remaining_days = None
+                membership_message = (
+                    f'Tu membresía inicia el {latest_membership.fecha_inicio:%d/%m/%Y}.'
+                )
+            elif latest_membership.fecha_fin < today:
+                membership_status = 'vencida'
+                membership_message = (
+                    f'Tu plan venció el {latest_membership.fecha_fin:%d/%m/%Y}. '
+                    'Renuévalo para seguir disfrutando los beneficios del gimnasio.'
+                )
+            else:
+                if remaining_days == 0:
+                    membership_status = 'vence_hoy'
+                    membership_message = (
+                        'Tu plan vence hoy. Renuévalo para seguir disfrutando los beneficios del gimnasio.'
+                    )
+                elif remaining_days == 1:
+                    membership_status = 'vence_1_dia'
+                    membership_message = (
+                        'Tu plan vence mañana. Renuévalo para seguir disfrutando los beneficios del gimnasio.'
+                    )
+                elif remaining_days in (2, 3):
+                    membership_status = f'vence_{remaining_days}_dias'
+                    membership_message = (
+                        f'Tu plan vence dentro de {remaining_days} días. '
+                        'Renuévalo para seguir disfrutando los beneficios del gimnasio.'
+                    )
+                else:
+                    membership_status = 'vigente'
+                    membership_message = f'Tu plan está vigente hasta el {latest_membership.fecha_fin:%d/%m/%Y}.'
+
+        streak = 0
+        streak_start = today - timedelta(days=365)
+        streak_memberships = list(
+            member.memberships.operativas().filter(
+                fecha_inicio__lte=today, fecha_fin__gte=streak_start
+            ).values_list('fecha_inicio', 'fecha_fin')
+        )
+        streak_attendances = set(
+            member.asistencias.filter(fecha__gte=streak_start, fecha__lte=today)
+            .values_list('fecha', flat=True)
+        )
+        attended_operational = [
+            day for day in streak_attendances
+            if covered(day, streak_memberships)
+        ]
+        cursor = max(attended_operational, default=None)
+        while cursor is not None and cursor >= streak_start:
+            if cursor.weekday() == 6:
+                cursor -= timedelta(days=1)
+                continue
+            if cursor not in streak_attendances or not covered(cursor, streak_memberships):
+                break
+            streak += 1
+            cursor -= timedelta(days=1)
+
+        payments = member.payments.filter(anulado=False).select_related('membership').order_by('-fecha', '-id')
+        return Response({
+            'member': {'nombre': member.nombres, 'apellidos': member.apellidos},
+            'today': today.isoformat(),
+            'month': month_start.strftime('%Y-%m'),
+            'membership': {
+                'plan': latest_membership.plan.nombre if latest_membership else None,
+                'fecha_fin': latest_membership.fecha_fin.isoformat() if latest_membership else None,
+                'dias_restantes': max(remaining_days, 0) if remaining_days is not None else None,
+                'estado': membership_status,
+                'mensaje': membership_message,
+            },
+            'attendance': {
+                'days': calendar_days,
+                'attended': attended_count,
+                'expected': len(elapsed_expected),
+                'percentage': round(attended_count * 100 / len(elapsed_expected)) if elapsed_expected else 0,
+                'streak': streak,
+                'streak_active': streak >= 3,
+            },
+            'payments': [
+                {
+                    'id': payment.id,
+                    'fecha': payment.fecha.isoformat(),
+                    'monto_cop': payment.monto_cop,
+                    'metodo': payment.get_metodo_display(),
+                    'referencia': payment.referencia,
+                }
+                for payment in payments
+            ],
+        })
 
 
 class DashboardView(APIView):
@@ -322,6 +521,13 @@ class PlanSerializer(serializers.ModelSerializer):
     def validate_es_pareja(self, value):
         if self.instance and value != self.instance.es_pareja and self.instance.memberships.exists():
             raise serializers.ValidationError('No se puede cambiar el tipo de un plan con membresías registradas.')
+        return value
+
+    def validate_duracion_dias(self, value):
+        if self.instance and value != self.instance.duracion_dias and self.instance.memberships.exists():
+            raise serializers.ValidationError(
+                'No se puede cambiar la duración de un plan con membresías registradas.'
+            )
         return value
 
     def get_total_memberships(self, obj):
@@ -506,13 +712,16 @@ class MemberRegistrationSerializer(MemberValidationFieldsMixin, serializers.Seri
         fecha_inicio = validated_data.pop('fecha_inicio', None)
         validated_data.pop('acepta_datos')
         member = Member.objects.create(acepta_datos_en=timezone.now(), **validated_data)
-        registrar_pago(
-            member,
-            plan,
-            metodo,
-            usuario=self.context['request'].user,
-            fecha_inicio=fecha_inicio,
-        )
+        try:
+            registrar_pago(
+                member,
+                plan,
+                metodo,
+                usuario=self.context['request'].user,
+                fecha_inicio=fecha_inicio,
+            )
+        except MembershipOverlapError as exc:
+            raise serializers.ValidationError({'fecha_inicio': str(exc)}) from exc
         return member
 
 
@@ -611,15 +820,18 @@ class PaymentCreateSerializer(serializers.Serializer):
         return value
 
     def create(self, validated_data):
-        return registrar_pago(
-            validated_data['member'],
-            validated_data['plan'],
-            validated_data['metodo'],
-            monto_cop=validated_data.get('monto_cop'),
-            referencia=validated_data.get('referencia', ''),
-            usuario=self.context['request'].user,
-            fecha_inicio=validated_data.get('fecha_inicio'),
-        )
+        try:
+            return registrar_pago(
+                validated_data['member'],
+                validated_data['plan'],
+                validated_data['metodo'],
+                monto_cop=validated_data.get('monto_cop'),
+                referencia=validated_data.get('referencia', ''),
+                usuario=self.context['request'].user,
+                fecha_inicio=validated_data.get('fecha_inicio'),
+            )
+        except MembershipOverlapError as exc:
+            raise serializers.ValidationError({'fecha_inicio': str(exc)}) from exc
 
 
 class PairNewMemberSerializer(MemberValidationFieldsMixin, serializers.Serializer):
@@ -875,6 +1087,14 @@ class MembershipFreezeView(APIView):
             end_date = membership.fecha_fin + timedelta(days=5)
         except OverflowError:
             raise serializers.ValidationError({'detail': 'La fecha final excede el límite permitido.'})
+        if Membership.objects.operativas().filter(
+            member=membership.member,
+            fecha_inicio__lte=end_date,
+            fecha_fin__gte=membership.fecha_inicio,
+        ).exclude(pk=pk).exists():
+            raise serializers.ValidationError(
+                {'detail': 'La congelación produciría un solapamiento con otra membresía.'}
+            )
         updated = Membership.objects.operativas().filter(
             pk=pk,
             congelada=False,
@@ -906,6 +1126,14 @@ class MembershipStartDateView(APIView):
             end_date = start_date + (membership.fecha_fin - membership.fecha_inicio)
         except OverflowError:
             raise serializers.ValidationError({'fecha_inicio': 'La fecha final excede el límite permitido.'})
+        if Membership.objects.operativas().filter(
+            member=membership.member,
+            fecha_inicio__lte=end_date,
+            fecha_fin__gte=start_date,
+        ).exclude(pk=pk).exists():
+            raise serializers.ValidationError(
+                {'fecha_inicio': 'La corrección produciría un solapamiento con otra membresía.'}
+            )
         updated = queryset.filter(
             pk=pk,
             fecha_inicio=membership.fecha_inicio,
