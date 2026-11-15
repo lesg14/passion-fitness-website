@@ -41,6 +41,38 @@ def calcular_estadisticas(hoy=None):
         .count()
     )
     pagos = Payment.objects.filter(anulado=False)
+    previous_month_end = hoy.replace(day=1) - timedelta(days=1)
+    previous_month_start = previous_month_end.replace(day=1)
+    previous_vigentes = operativas.filter(
+        member__archivado=False,
+        fecha_inicio__lte=previous_month_end,
+        fecha_fin__gte=previous_month_end,
+    )
+    previous_active = previous_vigentes.values("member").distinct().count()
+    previous_due = (
+        previous_vigentes.values("member")
+        .annotate(fin=Max("fecha_fin"))
+        .filter(fin__lte=previous_month_end + timedelta(days=3))
+        .count()
+    )
+    previous_total = miembros_activos.filter(fecha_registro__lte=previous_month_end).count()
+    previous_income = pagos.filter(
+        fecha__gte=previous_month_start, fecha__lte=previous_month_end
+    ).aggregate(t=Sum("monto_cop"))["t"] or 0
+
+    def comparison(current, previous, positive_when='up'):
+        if previous == 0:
+            percentage = 100 if current else 0
+        else:
+            percentage = round((current - previous) * 100 / previous, 1)
+        direction = 'neutral' if percentage == 0 else 'up' if percentage > 0 else 'down'
+        positive = direction == positive_when or direction == 'neutral'
+        return {
+            'porcentaje': abs(percentage),
+            'direccion': direction,
+            'positivo': positive,
+            'anterior': previous,
+        }
     desde = (hoy.replace(day=1) - timedelta(days=150)).replace(day=1)
     ingresos = (
         pagos.filter(fecha__gte=desde)
@@ -65,5 +97,14 @@ def calcular_estadisticas(hoy=None):
         "planes_data": [p["n"] for p in planes],
         "metodos_labels": [m["metodo"] for m in metodos],
         "metodos_data": [m["total"] for m in metodos],
+        "comparativos": {
+            "miembros": comparison(total, previous_total),
+            "por_vencer": comparison(por_vencer, previous_due, positive_when='down'),
+            "ingresos_mes": comparison(
+                pagos.filter(fecha__year=hoy.year, fecha__month=hoy.month).aggregate(t=Sum("monto_cop"))["t"] or 0,
+                previous_income,
+            ),
+            "activos": comparison(activos, previous_active),
+        },
     }
 

@@ -505,6 +505,7 @@ class DashboardView(APIView):
                 'vencidos': stats['vencidos'],
                 'por_vencer': stats['por_vencer'],
                 'ingresos_mes': stats['ingresos_mes'],
+                'comparativos': stats.get('comparativos', {}),
             },
             'revenue': [{'month': month, 'revenue': total} for month, total in revenue],
             'plans': [{'name': name, 'memberships': count} for name, count in plans],

@@ -8,6 +8,7 @@ from django.utils import timezone
 from apps.billing.models import Membership, Payment, registrar_pago
 from apps.members.models import Member
 from apps.plans.models import Plan
+from apps.dashboard.views import calcular_estadisticas
 
 
 class DashboardApiTests(TestCase):
@@ -42,6 +43,34 @@ class DashboardApiTests(TestCase):
         response = self.client.get('/api/members/').json()
         self.assertEqual(response[0]['nombre'], 'Ana Gómez')
         self.assertEqual(response[0]['estado'], 'Sin membresía')
+
+    def test_dashboard_comparatives_use_previous_month_and_ignore_voided_payments(self):
+        first_of_month = self.hoy.replace(day=1)
+        previous_month_end = first_of_month - timedelta(days=1)
+        previous_month_start = previous_month_end.replace(day=1)
+        current_payment = registrar_pago(self.member, self.plan, 'efectivo', fecha_inicio=self.hoy)
+        current_payment.fecha = self.hoy
+        current_payment.save(update_fields=['fecha'])
+        previous_payment = Payment.objects.create(
+            member=self.member,
+            membership=Membership.objects.create(
+                member=self.member,
+                plan=self.plan,
+                fecha_inicio=previous_month_start,
+                fecha_fin=previous_month_end,
+            ),
+            monto_cop=999999,
+            metodo='efectivo',
+            fecha=previous_month_end,
+        )
+        previous_payment.anulado = True
+        previous_payment.save(update_fields=['anulado'])
+
+        stats = calcular_estadisticas(self.hoy)
+
+        self.assertEqual(stats['comparativos']['ingresos_mes']['anterior'], 0)
+        self.assertEqual(stats['comparativos']['ingresos_mes']['porcentaje'], 100)
+        self.assertEqual(stats['comparativos']['ingresos_mes']['direccion'], 'up')
 
     def test_expiring_member_states_match_dashboard_count(self):
         cases = [
