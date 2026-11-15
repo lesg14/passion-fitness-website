@@ -3,6 +3,14 @@ from django.db import models
 from django.utils import timezone
 
 
+def normalize_person_name(value):
+    words = value.strip().split()
+    return " ".join(
+        " ".join(part.capitalize() for part in word.split("-"))
+        for word in words
+    )
+
+
 class Member(models.Model):
     class TipoDocumento(models.TextChoices):
         CC = "CC", "Cédula de ciudadanía"
@@ -34,6 +42,11 @@ class Member(models.Model):
 
     def __str__(self):
         return f"{self.nombres} {self.apellidos}"
+
+    def save(self, *args, **kwargs):
+        self.nombres = normalize_person_name(self.nombres)
+        self.apellidos = normalize_person_name(self.apellidos)
+        super().save(*args, **kwargs)
 
     @property
     def membresia_vigente(self):
