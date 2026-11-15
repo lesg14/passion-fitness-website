@@ -133,20 +133,29 @@ button { color: inherit; }
 .login-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 4px; background: #eff3ee; border-radius: 7px; margin-bottom: 20px; }
 .login-tab { border: 0; background: transparent; padding: 8px 10px; font-size: 11px; font-weight: 600; color: #5f6e62; border-radius: 5px; cursor: pointer; transition: all 150ms ease; display: flex; align-items: center; justify-content: center; gap: 6px; }
 
-.member-portal { min-height: 100vh; background: #f5f6f2; color: var(--ink); }
-.member-portal-header { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 28px max(24px, 6vw); border-bottom: 1px solid #e8ebe5; background: #fff; }
-.member-portal-header h1 { margin-bottom: 6px; }
+.member-portal { position: relative; min-height: 100vh; overflow: hidden; background: #f5f6f2; color: var(--ink); }
+.member-portal::before { position: absolute; z-index: 0; inset: -18%; content: ''; pointer-events: none; background-image: url('./passion-fitness-logo.png'); background-repeat: repeat; background-size: 145px auto; opacity: .045; transform: rotate(-45deg); }
+.member-portal-header, .member-portal-content, .member-portal-footer { position: relative; z-index: 1; }
+.member-portal-header { display: flex; justify-content: space-between; align-items: center; gap: 20px; max-width: 1280px; margin: 0 auto; padding: 32px max(24px, 5vw) 18px; }
+.member-portal-header h1 { margin: 4px 0 7px; letter-spacing: -.8px; }
+.member-portal-header h1 span { color: #d99a43; }
+.member-portal-header .page-subtitle { color: #7b897c; }
+.member-portal-header .button { border-radius: 999px; box-shadow: 0 4px 12px #3d563d12; }
 .member-portal-content { max-width: 1280px; margin: 0 auto; padding: 30px max(24px, 5vw); }
 .member-expired-alert { display: flex; justify-content: space-between; align-items: center; gap: 18px; margin-bottom: 16px; padding: 15px 18px; border: 1px solid #efc8bf; border-left: 4px solid #d86f58; border-radius: 8px; color: #85483c; background: #fff5f1; }
 .member-expired-alert strong { display: block; margin-bottom: 4px; font-size: 13px; }.member-expired-alert p { margin: 0; font-size: 11px; line-height: 1.5; }.member-expired-alert > span { flex: 0 0 auto; color: #a45b4b; font-size: 10px; font-weight: 600; }
 .member-expired-alert:not(.urgent) { border-color: #ead7bd; border-left-color: #d39a55; color: #80603d; background: #fffaf1; }.member-expired-alert:not(.urgent) > span { color: #9a7445; }
 .member-portal-metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 16px; }
-.member-portal-card, .member-portal-panel { border: 1px solid #e8ebe5; border-radius: 9px; background: #fff; }
-.member-portal-card { display: grid; grid-template-columns: auto 1fr; column-gap: 10px; align-items: center; padding: 18px; color: #578267; }
+.member-portal-card, .member-portal-panel { border: 1px solid #e4e9df; border-radius: 12px; background: #fffffff2; box-shadow: 0 10px 24px #3d563d0d; backdrop-filter: blur(5px); }
+.member-portal-card { display: grid; grid-template-columns: auto 1fr; column-gap: 10px; align-items: center; padding: 18px; color: #578267; transition: transform 160ms ease, box-shadow 160ms ease; }
+.member-portal-card:hover { transform: translateY(-2px); box-shadow: 0 14px 28px #3d563d18; }
 .member-portal-card span { color: #788378; font-size: 11px; }
 .member-portal-card strong { grid-column: 2; color: #29372d; font: 700 25px 'Manrope', sans-serif; }
 .member-portal-card small { grid-column: 2; color: #9aa198; font-size: 10px; }
-.member-portal-card.streak-active { border-color: #d3e6bd; background: #fbfdf8; }
+.member-portal-card:nth-child(1) { border-top: 3px solid #78a98a; }
+.member-portal-card:nth-child(2) { border-top: 3px solid #d5ad63; }
+.member-portal-card:nth-child(3) { border-top: 3px solid #df8061; }
+.member-portal-card.streak-active { border-color: #d3e6bd; background: linear-gradient(135deg, #fbfdf8, #f3f8e9); }
 .member-portal-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(360px, .8fr); gap: 16px; }
 .member-portal-panel { padding: 20px; }
 .member-portal-panel-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 18px; }
