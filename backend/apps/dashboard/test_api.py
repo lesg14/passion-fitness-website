@@ -634,8 +634,8 @@ class DashboardApiTests(TestCase):
         members = {item['nombre']: item['estado'] for item in self.client.get('/api/members/').json()}
         self.assertEqual(members['Hoy Test'], 'Vence hoy')
         self.assertEqual(members['Manana Test'], 'Vence mañana')
-        self.assertEqual(members['DosDias Test'], 'Vence en 2 días')
-        self.assertEqual(members['TresDias Test'], 'Vence en 3 días')
+        self.assertEqual(members['Dosdias Test'], 'Vence en 2 días')
+        self.assertEqual(members['Tresdias Test'], 'Vence en 3 días')
         self.assertEqual(members['Activo Test'], 'Activo')
         self.assertEqual(members['Vencido Test'], 'Vencido')
 
