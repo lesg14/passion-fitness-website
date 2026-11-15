@@ -5,15 +5,20 @@ import {
   Archive,
   ArrowLeft,
   ArrowUpRight,
+  ArrowDownRight,
   CalendarDays,
   Check,
   ChevronDown,
   CircleHelp,
   Clock,
   CreditCard,
+  ChevronsLeft,
+  ChevronsRight,
+  ChevronsUpDown,
   Edit2,
   Eye,
   EyeOff,
+  FileDown,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -270,7 +275,12 @@ function LoginScreen({ onLogin, connectionError }) {
         </div>
         <div className="login-hero-footer">
           <span>© {new Date().getFullYear()} Passion Fitness</span>
-          <span className="login-developer">Desarrollado por <strong>LS Solutions</strong></span>
+          <span className="login-developer">
+            Desarrollado por{' '}
+            <a href="https://ls-solutions-website.vercel.app/" target="_blank" rel="noreferrer">
+              LS Solutions
+            </a>
+          </span>
         </div>
       </aside>
       <section className="login-panel">
@@ -367,13 +377,19 @@ function LoginScreen({ onLogin, connectionError }) {
   );
 }
 
-function Metric({ icon: Icon, label, value, caption, tone }) {
+function Metric({ icon: Icon, label, value, caption, tone, comparison }) {
   return (
     <article className="metric">
       <div className="metric-topline">
         <span className={`metric-icon ${tone}`}>
           <Icon size={18} />
         </span>
+        {comparison && (
+          <span className={`metric-change ${comparison.direccion === 'neutral' ? 'neutral' : comparison.positivo ? 'up' : 'down'}`}>
+            {comparison.direccion === 'down' ? <ArrowDownRight size={12} /> : comparison.direccion === 'up' ? <ArrowUpRight size={12} /> : null}
+            {comparison.porcentaje}% <span className="metric-change-period">vs mes anterior</span>
+          </span>
+        )}
       </div>
       <p className="metric-label">{label}</p>
       <p className="metric-value">{value}</p>
@@ -1319,6 +1335,13 @@ function MembersManagementView({
   const [selectedMemberForEdit, setSelectedMemberForEdit] = useState(null);
   const [selectedMemberForDelete, setSelectedMemberForDelete] = useState(null);
   const [actionError, setActionError] = useState('');
+  const [firstNameLetter, setFirstNameLetter] = useState('');
+  const [lastNameLetter, setLastNameLetter] = useState('');
+  const [sortDirection, setSortDirection] = useState('asc');
+  const [pageSize, setPageSize] = useState(10);
+  const [page, setPage] = useState(1);
+  const alphabet = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'Ñ', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'];
+  const normalizeText = (value) => value.toLocaleUpperCase('es').normalize('NFD').replace(/N\u0303/g, 'Ñ').replace(/[\u0300-\u036f]/g, '');
 
   const { filteredMembers, counts } = useMemo(() => {
     let act = 0;
@@ -1336,6 +1359,8 @@ function MembersManagementView({
 
     const filtered = members.filter((member) => {
       if (!matchesMemberSearch(member, query, [member.plan, member.telefono])) return false;
+      if (firstNameLetter && !normalizeText(member.nombres).startsWith(normalizeText(firstNameLetter))) return false;
+      if (lastNameLetter && !normalizeText(member.apellidos).startsWith(normalizeText(lastNameLetter))) return false;
 
       if (statusFilter === 'archivados') return member.archivado;
       if (member.archivado) return statusFilter === 'todos';
@@ -1345,6 +1370,12 @@ function MembersManagementView({
       if (statusFilter === 'proximos') return member.estado === 'Próxima';
       if (statusFilter === 'vencidos') return member.estado === 'Vencido' || member.estado === 'Sin membresía';
       return true;
+    });
+
+    filtered.sort((a, b) => {
+      const left = normalizeText(a.nombre || `${a.nombres} ${a.apellidos}`);
+      const right = normalizeText(b.nombre || `${b.nombres} ${b.apellidos}`);
+      return left.localeCompare(right, 'es') * (sortDirection === 'asc' ? 1 : -1);
     });
 
     return {
@@ -1358,7 +1389,36 @@ function MembersManagementView({
         archivados,
       },
     };
-  }, [members, query, statusFilter]);
+  }, [members, query, statusFilter, firstNameLetter, lastNameLetter, sortDirection]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [query, statusFilter, firstNameLetter, lastNameLetter, sortDirection, pageSize]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredMembers.length / pageSize));
+  const visibleMembers = filteredMembers.slice((page - 1) * pageSize, page * pageSize);
+
+  function exportMembersCsv() {
+    const escapeCsv = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+    const headers = ['Nombres', 'Apellidos', 'Documento', 'Teléfono', 'Correo', 'Plan', 'Fecha de vencimiento', 'Estado'];
+    const rows = filteredMembers.map((member) => [
+      member.nombres,
+      member.apellidos,
+      `${member.tipo_documento} ${member.numero_documento}`,
+      member.telefono,
+      member.email,
+      member.plan || 'Sin plan',
+      member.fecha_fin || '',
+      member.estado,
+    ]);
+    const csv = `\uFEFF${[headers, ...rows].map((row) => row.map(escapeCsv).join(';')).join('\r\n')}`;
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `miembros-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
 
   async function handleCreateMember(data) {
     const member = await apiRequest('/members/', { method: 'POST', body: data });
@@ -1476,7 +1536,15 @@ function MembersManagementView({
                 Limpiar
               </button>
             )}
+            <button className="button button-quiet" type="button" onClick={exportMembersCsv} disabled={!filteredMembers.length}>
+              <FileDown size={14} /> Exportar
+            </button>
           </div>
+        </div>
+
+        <div className="alphabet-filters" aria-label="Filtros alfabéticos">
+          <div><strong>Nombre</strong><button type="button" className={!firstNameLetter ? 'active' : ''} onClick={() => setFirstNameLetter('')}>Todos</button>{alphabet.map((letter) => <button type="button" className={firstNameLetter === letter ? 'active' : ''} key={`first-${letter}`} onClick={() => setFirstNameLetter(letter)}>{letter}</button>)}{firstNameLetter && <button type="button" className="alphabet-clear" onClick={() => setFirstNameLetter('')}>Limpiar</button>}</div>
+          <div><strong>Apellido(s)</strong><button type="button" className={!lastNameLetter ? 'active' : ''} onClick={() => setLastNameLetter('')}>Todos</button>{alphabet.map((letter) => <button type="button" className={lastNameLetter === letter ? 'active' : ''} key={`last-${letter}`} onClick={() => setLastNameLetter(letter)}>{letter}</button>)}{lastNameLetter && <button type="button" className="alphabet-clear" onClick={() => setLastNameLetter('')}>Limpiar</button>}</div>
         </div>
 
         {/* Barra de filtros de estado */}
@@ -1541,11 +1609,26 @@ function MembersManagementView({
           </div>
         </div>
 
+        <div className="members-pagination members-pagination-top">
+          <label>Filas
+            <select value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))}>
+              <option value={10}>10</option><option value={20}>20</option><option value={30}>30</option>
+            </select>
+          </label>
+          <span>Página {page} de {totalPages} · {filteredMembers.length} miembros</span>
+          <div>
+            <button className="icon-button" type="button" onClick={() => setPage(1)} disabled={page === 1} aria-label="Primera página"><ChevronsLeft size={15} /></button>
+            <button className="button button-quiet" type="button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page === 1}>Anterior</button>
+            <button className="button button-quiet" type="button" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page === totalPages}>Siguiente</button>
+            <button className="icon-button" type="button" onClick={() => setPage(totalPages)} disabled={page === totalPages} aria-label="Última página"><ChevronsRight size={15} /></button>
+          </div>
+        </div>
+
         <div className="table-scroll">
           <table>
             <thead>
               <tr>
-                <th>MIEMBRO</th>
+                <th>MIEMBRO <button className="table-sort-button" type="button" onClick={() => setSortDirection((current) => current === 'asc' ? 'desc' : 'asc')} aria-label={`Ordenar miembros ${sortDirection === 'asc' ? 'de Z a A' : 'de A a Z'}`} title={`Orden actual: ${sortDirection === 'asc' ? 'A → Z' : 'Z → A'}`}><ChevronsUpDown size={13} /></button></th>
                 <th>DOCUMENTO</th>
                 <th>PLAN ACTUAL</th>
                 <th>VENCIMIENTO</th>
@@ -1555,7 +1638,7 @@ function MembersManagementView({
             </thead>
             <tbody>
               {filteredMembers.length ? (
-                filteredMembers.map((member) => (
+                visibleMembers.map((member) => (
                   <tr key={member.id}>
                     <td>
                       <div className="member-cell">
@@ -2256,6 +2339,7 @@ function PaymentHistoryView({
   members,
   initialMemberId,
   isAdmin,
+  username,
   onBackToDashboard,
   onOpenRenew,
   onRefreshData,
@@ -2269,6 +2353,10 @@ function PaymentHistoryView({
   const [statusFilter, setStatusFilter] = useState('todos');
   const [selectedPaymentForVoid, setSelectedPaymentForVoid] = useState(null);
   const [membershipChange, setMembershipChange] = useState(null);
+  const [pageSize, setPageSize] = useState(10);
+  const [page, setPage] = useState(1);
+  const [reportPeriod, setReportPeriod] = useState('year');
+  const [reportYear, setReportYear] = useState(String(new Date().getFullYear()));
 
   async function loadPayments(memberId) {
     setLoading(true);
@@ -2287,6 +2375,10 @@ function PaymentHistoryView({
   useEffect(() => {
     loadPayments(selectedMemberId);
   }, [selectedMemberId]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [selectedMemberId, query, statusFilter, pageSize]);
 
   const selectedMember = useMemo(
     () => members.find((m) => m.id === Number(selectedMemberId)) || null,
@@ -2323,6 +2415,74 @@ function PaymentHistoryView({
       latest: latestPayment,
     };
   }, [payments]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredPayments.length / pageSize));
+  const visiblePayments = filteredPayments.slice((page - 1) * pageSize, page * pageSize);
+  const reportPayments = useMemo(() => {
+    const year = Number(reportYear);
+    let start = `${year}-01-01`;
+    let end = `${year}-12-31`;
+    if (reportPeriod.startsWith('month-')) {
+      const month = Number(reportPeriod.split('-')[1]);
+      start = `${year}-${String(month).padStart(2, '0')}-01`;
+      end = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
+    } else if (reportPeriod.startsWith('semester-')) {
+      const semester = Number(reportPeriod.split('-')[1]);
+      const firstMonth = semester === 1 ? 1 : 7;
+      start = `${year}-${String(firstMonth).padStart(2, '0')}-01`;
+      end = new Date(Date.UTC(year, firstMonth + 5, 0)).toISOString().slice(0, 10);
+    } else if (reportPeriod.startsWith('quarter-')) {
+      const quarter = Number(reportPeriod.split('-')[1]);
+      const firstMonth = (quarter - 1) * 3 + 1;
+      start = `${year}-${String(firstMonth).padStart(2, '0')}-01`;
+      end = new Date(Date.UTC(year, firstMonth + 2, 0)).toISOString().slice(0, 10);
+    }
+    return payments.filter((payment) => payment.fecha >= start && payment.fecha <= end);
+  }, [payments, reportPeriod, reportYear]);
+
+  function exportPaymentsPdf() {
+    const periodLabel = reportPeriod === 'year'
+      ? `Año ${reportYear}`
+      : reportPeriod.startsWith('month-')
+        ? `${new Intl.DateTimeFormat('es-CO', { month: 'long' }).format(new Date(Number(reportYear), Number(reportPeriod.split('-')[1]) - 1, 1))} ${reportYear}`
+        : reportPeriod.startsWith('semester-')
+          ? `Semestre ${reportPeriod.split('-')[1]} de ${reportYear}`
+          : `Trimestre ${reportPeriod.split('-')[1]} de ${reportYear}`;
+    const total = reportPayments.filter((payment) => !payment.anulado)
+      .reduce((sum, payment) => sum + payment.monto_cop, 0);
+    const rows = reportPayments.map((payment) => `
+      <tr>
+        <td>${formatDate(payment.fecha)}</td>
+        <td>${payment.member_nombre || selectedMember?.nombre || '—'}</td>
+        <td>${payment.plan_nombre || '—'}</td>
+        <td>${payment.metodo_display || payment.metodo}</td>
+        <td>${formatCurrency(payment.monto_cop)}</td>
+        <td>${payment.anulado ? 'Anulado' : 'Pagado'}</td>
+      </tr>`).join('');
+    const reportWindow = window.open('', '_blank');
+    if (!reportWindow) {
+      showToast('No se pudo abrir el documento. Permite ventanas emergentes e inténtalo de nuevo.');
+      return;
+    }
+    reportWindow.opener = null;
+    reportWindow.document.open();
+    reportWindow.document.write(`<!doctype html><html><head><title>Reporte de pagos - ${periodLabel}</title>
+      <style>
+        @page { size: A4; margin: 16mm; } body { font: 12px Arial, sans-serif; color: #233226; }
+        header { display:flex; align-items:center; gap:16px; border-bottom:3px solid #367559; padding-bottom:14px; }
+        header img { width:80px; } h1 { margin:0; font-size:21px; } p { color:#68776b; }
+        .summary { display:flex; gap:32px; margin:22px 0; } .summary strong { display:block; font-size:18px; margin-top:4px; }
+        table { width:100%; border-collapse:collapse; } th { background:#edf3ed; text-align:left; font-size:10px; }
+        th,td { padding:8px 7px; border-bottom:1px solid #e1e7e0; } td { font-size:10px; }
+        footer { margin-top:22px; color:#7b877c; font-size:10px; } @media print { footer { position:fixed; bottom:0; } }
+      </style></head><body>
+      <header><img src="${brandLogo}" alt="Passion Fitness"><div><h1>Reporte de pagos</h1><p>${selectedMember ? `Miembro: ${selectedMember.nombre}` : 'Historial general del club'} · ${periodLabel}</p></div></header>
+      <section class="summary"><div>Pagos incluidos<strong>${reportPayments.length}</strong></div><div>Recaudado válido<strong>${formatCurrency(total)}</strong></div><div>Generado por<strong>${username}</strong></div></section>
+      <table><thead><tr><th>FECHA</th><th>MIEMBRO</th><th>PLAN</th><th>MÉTODO</th><th>MONTO</th><th>ESTADO</th></tr></thead><tbody>${rows || '<tr><td colspan="6">No hay pagos en el periodo seleccionado.</td></tr>'}</tbody></table>
+      <footer>Passion Fitness · Generado el ${new Date().toLocaleString('es-CO')} · Usuario: ${username}</footer>
+      <script>window.onload=function(){setTimeout(function(){window.print();},300);}</script></body></html>`);
+    reportWindow.document.close();
+  }
 
   return (
     <div className="page-wrap">
@@ -2495,6 +2655,40 @@ function PaymentHistoryView({
           </div>
         </div>
 
+        <div className="payment-report-toolbar">
+          <div className="payment-report-filters">
+            <label>Año
+              <input type="number" min="2000" max="2100" value={reportYear} onChange={(event) => setReportYear(event.target.value)} />
+            </label>
+            <label>Periodo
+              <select value={reportPeriod} onChange={(event) => setReportPeriod(event.target.value)}>
+                <option value="year">Todo el año</option>
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((month) => <option key={month} value={`month-${month}`}>Mes {month}</option>)}
+                <option value="semester-1">Semestre 1</option><option value="semester-2">Semestre 2</option>
+                <option value="quarter-1">Trimestre 1</option><option value="quarter-2">Trimestre 2</option><option value="quarter-3">Trimestre 3</option><option value="quarter-4">Trimestre 4</option>
+              </select>
+            </label>
+          </div>
+          <button className="button button-primary" type="button" onClick={exportPaymentsPdf}>
+            <FileDown size={15} /> Exportar PDF ({reportPayments.length})
+          </button>
+        </div>
+
+        <div className="payment-pagination payment-pagination-top">
+          <label>Filas
+            <select value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))}>
+              <option value={10}>10</option><option value={20}>20</option><option value={30}>30</option>
+            </select>
+          </label>
+          <span>Página {page} de {totalPages} · {filteredPayments.length} registros</span>
+          <div>
+            <button className="icon-button" type="button" onClick={() => setPage(1)} disabled={page === 1} aria-label="Primera página"><ChevronsLeft size={15} /></button>
+            <button className="button button-quiet" type="button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page === 1}>Anterior</button>
+            <button className="button button-quiet" type="button" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page === totalPages}>Siguiente</button>
+            <button className="icon-button" type="button" onClick={() => setPage(totalPages)} disabled={page === totalPages} aria-label="Última página"><ChevronsRight size={15} /></button>
+          </div>
+        </div>
+
         {loading ? (
           <p style={{ textAlign: 'center', padding: '30px 0', color: '#778077', fontSize: 12 }}>
             Cargando historial de pagos…
@@ -2517,7 +2711,7 @@ function PaymentHistoryView({
               </thead>
               <tbody>
                 {filteredPayments.length ? (
-                  filteredPayments.map((payment) => (
+                  visiblePayments.map((payment) => (
                     <tr key={payment.id} style={{ opacity: payment.anulado ? 0.65 : 1 }}>
                       <td>
                         <strong style={{ fontSize: 11, color: '#233226' }}>
@@ -3014,12 +3208,13 @@ export default function App() {
             onRefreshData={() => setRefreshKey((c) => c + 1)}
           />
         ) : activeTab === 'access' ? (
-          <AccessManagement members={members} MemberCombobox={MemberCombobox} />
+          <AccessManagement members={members} MemberCombobox={MemberCombobox} username={user.username} />
         ) : activeTab === 'history' ? (
           <PaymentHistoryView
             members={members}
             initialMemberId={historyMemberId}
             isAdmin={isAdmin}
+            username={user.username}
             onBackToDashboard={() => setActiveTab('dashboard')}
             onOpenRenew={(member) => setSelectedMemberForRenewal(member)}
             onRefreshData={() => setRefreshKey((current) => current + 1)}
@@ -3070,6 +3265,7 @@ export default function App() {
                 value={metrics?.miembros ?? '—'}
                 caption="Total en el sistema"
                 tone="green"
+                comparison={metrics?.comparativos?.miembros}
               />
               <Metric
                 icon={CalendarDays}
@@ -3085,6 +3281,7 @@ export default function App() {
                   value={metrics ? formatCompactCurrency(metrics.ingresos_mes) : '—'}
                   caption="Pagos no anulados · COP"
                   tone="blue"
+                  comparison={metrics?.comparativos?.ingresos_mes}
                 />
               )}
               <Metric
@@ -3093,6 +3290,7 @@ export default function App() {
                 value={metrics?.activos ?? '—'}
                 caption={`${metrics?.vencidos ?? 0} vencidos${(metrics?.proximos || 0) > 0 ? ` · ${metrics.proximos} próximas` : ''}`}
                 tone="pink"
+                comparison={metrics?.comparativos?.activos}
               />
             </section>
 
