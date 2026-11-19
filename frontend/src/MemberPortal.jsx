@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CalendarCheck, Check, ChevronLeft, ChevronRight, Clock3, Flame, LogOut, X } from 'lucide-react';
+import { CalendarCheck, Check, ChevronLeft, ChevronRight, Clock3, CreditCard, Flame, LogOut, X } from 'lucide-react';
 import { apiRequest } from './api.js';
 
 const monthFormatter = new Intl.DateTimeFormat('es-CO', {
@@ -31,6 +31,10 @@ export default function MemberPortal({ user, onLogout }) {
   const [portal, setPortal] = useState(null);
   const [error, setError] = useState('');
   const [selectedMonth, setSelectedMonth] = useState(null);
+  const [plans, setPlans] = useState([]);
+  const [selectedPlan, setSelectedPlan] = useState('');
+  const [paymentAction, setPaymentAction] = useState(false);
+  const [paymentStatus, setPaymentStatus] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -43,11 +47,63 @@ export default function MemberPortal({ user, onLogout }) {
     return () => { active = false; };
   }, [selectedMonth]);
 
+  useEffect(() => {
+    apiRequest('/member/plans/')
+      .then((data) => {
+        setPlans(data);
+        if (data.length) setSelectedPlan(String(data[0].id));
+      })
+      .catch((requestError) => setError(requestError.message));
+  }, []);
+
+  useEffect(() => {
+    const paymentId = new URLSearchParams(window.location.search).get('payment_id');
+    if (!paymentId) return undefined;
+    let active = true;
+    let attempts = 0;
+    const checkStatus = () => {
+      apiRequest(`/member/payments/${paymentId}/`)
+        .then((data) => {
+          if (!active) return;
+          if (data.estado === 'aprobado') {
+            setPaymentStatus('Pago aprobado. Tu membresía ya fue activada.');
+            return;
+          }
+          if (['rechazado', 'anulado', 'expirado'].includes(data.estado)) {
+            setPaymentStatus(`El pago terminó con estado: ${data.estado}.`);
+            return;
+          }
+          attempts += 1;
+          if (attempts < 6) window.setTimeout(checkStatus, 2000);
+          else setPaymentStatus('El pago sigue pendiente. Actualiza en unos segundos para consultar el resultado.');
+        })
+        .catch((requestError) => { if (active) setPaymentStatus(requestError.message); });
+    };
+    checkStatus();
+    return () => { active = false; };
+  }, []);
+
   const cells = useMemo(() => getCalendarCells(portal?.attendance.days || []), [portal]);
 
   async function logout() {
     await apiRequest('/auth/logout/', { method: 'POST' });
     onLogout();
+  }
+
+  async function startPayment() {
+    if (!selectedPlan) return;
+    setPaymentAction(true);
+    setPaymentStatus('');
+    try {
+      const checkout = await apiRequest('/member/payments/checkout/', {
+        method: 'POST',
+        body: { plan_id: Number(selectedPlan) },
+      });
+      window.location.assign(checkout.checkout_url);
+    } catch (requestError) {
+      setPaymentStatus(requestError.message);
+      setPaymentAction(false);
+    }
   }
 
   if (error) {
@@ -81,9 +137,27 @@ export default function MemberPortal({ user, onLogout }) {
               <strong>{membership.estado === 'vencida' ? 'Tu plan está vencido' : 'Tu plan está próximo a vencer'}</strong>
               <p>{membership.mensaje}</p>
             </div>
-            <span>Acércate a recepción para renovarlo.</span>
+            <div className="member-payment-action">
+              <span>Renueva en línea y conserva la continuidad de tu membresía.</span>
+              <select
+                aria-label="Plan para renovar"
+                value={selectedPlan}
+                onChange={(event) => setSelectedPlan(event.target.value)}
+                disabled={paymentAction || !plans.length}
+              >
+                {plans.map((plan) => (
+                  <option value={plan.id} key={plan.id}>
+                    {plan.nombre} · {currencyFormatter.format(plan.precio_cop)}
+                  </option>
+                ))}
+              </select>
+              <button className="button button-primary" type="button" onClick={startPayment} disabled={paymentAction || !plans.length}>
+                <CreditCard size={15} /> {paymentAction ? 'Preparando pago…' : 'Renovar ahora'}
+              </button>
+            </div>
           </div>
         )}
+        {paymentStatus && <div className="member-payment-status" role="status">{paymentStatus}</div>}
         <section className="member-portal-metrics">
           <article className="member-portal-card">
             <Clock3 size={19} />
