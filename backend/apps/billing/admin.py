@@ -1,7 +1,7 @@
 from django import forms
 from django.contrib import admin
 
-from .models import Membership, Payment
+from .models import Membership, OnlinePayment, Payment
 
 
 class MembershipAdminForm(forms.ModelForm):
@@ -67,3 +67,14 @@ class PaymentAdmin(admin.ModelAdmin):
         if not change:
             obj.registrado_por = request.user
         super().save_model(request, obj, form, change)
+
+
+@admin.register(OnlinePayment)
+class OnlinePaymentAdmin(admin.ModelAdmin):
+    list_display = ("creado_en", "member", "plan", "monto_cop", "estado", "metodo", "referencia")
+    list_filter = ("estado", "metodo", "creado_en")
+    search_fields = ("member__nombres", "member__apellidos", "member__numero_documento", "referencia", "transaccion_id")
+    readonly_fields = (
+        "member", "plan", "referencia", "transaccion_id", "monto_cop", "estado", "metodo",
+        "fecha_inicio", "payment", "respuesta_proveedor", "creado_en", "actualizado_en",
+    )

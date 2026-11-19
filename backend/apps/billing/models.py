@@ -69,8 +69,41 @@ class Payment(models.Model):
         return f"{self.member} - ${self.monto_cop:,} ({self.fecha})"
 
 
+class OnlinePayment(models.Model):
+    class Estado(models.TextChoices):
+        PENDIENTE = "pendiente", "Pendiente"
+        APROBADO = "aprobado", "Aprobado"
+        RECHAZADO = "rechazado", "Rechazado"
+        EXPIRADO = "expirado", "Expirado"
+        ANULADO = "anulado", "Anulado"
+
+    member = models.ForeignKey("members.Member", on_delete=models.PROTECT, related_name="online_payments")
+    plan = models.ForeignKey("plans.Plan", on_delete=models.PROTECT, related_name="online_payments")
+    referencia = models.CharField(max_length=100, unique=True)
+    transaccion_id = models.CharField(max_length=100, blank=True, db_index=True)
+    monto_cop = models.PositiveIntegerField("monto (COP)")
+    estado = models.CharField(max_length=20, choices=Estado.choices, default=Estado.PENDIENTE, db_index=True)
+    metodo = models.CharField(max_length=40, blank=True)
+    fecha_inicio = models.DateField()
+    payment = models.OneToOneField(
+        Payment, null=True, blank=True, on_delete=models.PROTECT, related_name="online_payment"
+    )
+    respuesta_proveedor = models.JSONField(default=dict, blank=True)
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-creado_en", "-id"]
+
+    def __str__(self):
+        return f"{self.member} - {self.referencia} ({self.estado})"
+
+
 @transaction.atomic
-def registrar_pago(member, plan, metodo, monto_cop=None, fecha=None, referencia="", usuario=None, fecha_inicio=None, grupo_pareja=None):
+def registrar_pago(
+    member, plan, metodo, monto_cop=None, fecha=None, referencia="", usuario=None,
+    fecha_inicio=None, grupo_pareja=None, permitir_inicio_en_fecha_fin=False,
+):
     """Registra un pago y crea la membresía. Si se especifica fecha_inicio se usa; de lo contrario inicia al terminar la última vigente."""
     member = type(member).objects.select_for_update().get(pk=member.pk)
     fecha = fecha or timezone.localdate()
@@ -78,12 +111,18 @@ def registrar_pago(member, plan, metodo, monto_cop=None, fecha=None, referencia=
         inicio = fecha_inicio
     else:
         ultima = member.memberships.operativas().filter(fecha_fin__gte=fecha).order_by("-fecha_fin").first()
-        inicio = ultima.fecha_fin + timedelta(days=1) if ultima else fecha
+        inicio = (
+            ultima.fecha_fin
+            if ultima and permitir_inicio_en_fecha_fin
+            else ultima.fecha_fin + timedelta(days=1)
+            if ultima else fecha
+        )
     fin = inicio + timedelta(days=plan.duracion_dias - 1)
-    if member.memberships.operativas().filter(
-        fecha_inicio__lte=fin,
-        fecha_fin__gte=inicio,
-    ).exists():
+    overlap_filter = {
+        "fecha_inicio__lte": fin,
+        "fecha_fin__gt" if permitir_inicio_en_fecha_fin else "fecha_fin__gte": inicio,
+    }
+    if member.memberships.operativas().filter(**overlap_filter).exists():
         raise MembershipOverlapError(
             'La nueva membresía se cruza con otra membresía operativa del miembro.'
         )
