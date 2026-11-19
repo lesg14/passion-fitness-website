@@ -10,6 +10,9 @@ from .api import (
     DoorAccountListCreateView,
     LoginView,
     LogoutView,
+    MemberOnlinePaymentCreateView,
+    MemberOnlinePaymentStatusView,
+    MemberPlanListView,
     MemberPortalView,
     MemberDetailView,
     MemberListCreateView,
@@ -23,6 +26,7 @@ from .api import (
     ReceptionistDetailView,
     ReceptionistListCreateView,
     SessionView,
+    WompiWebhookView,
 )
 
 urlpatterns = [
@@ -31,6 +35,10 @@ urlpatterns = [
     path('auth/session/', SessionView.as_view(), name='api-session'),
     path('auth/logout/', LogoutView.as_view(), name='api-logout'),
     path('member/portal/', MemberPortalView.as_view(), name='api-member-portal'),
+    path('member/plans/', MemberPlanListView.as_view(), name='api-member-plans'),
+    path('member/payments/checkout/', MemberOnlinePaymentCreateView.as_view(), name='api-member-payment-checkout'),
+    path('member/payments/<int:pk>/', MemberOnlinePaymentStatusView.as_view(), name='api-member-payment-status'),
+    path('payments/webhook/wompi/', WompiWebhookView.as_view(), name='api-wompi-webhook'),
     path('auth/admin-profile/', AdminProfileView.as_view(), name='api-admin-profile'),
     path('dashboard/', DashboardView.as_view(), name='api-dashboard'),
     path('staff/', ReceptionistListCreateView.as_view(), name='api-staff'),

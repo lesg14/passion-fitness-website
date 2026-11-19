@@ -1,8 +1,10 @@
 import calendar
 from datetime import date, datetime, timedelta
 from collections.abc import Mapping
+from urllib.parse import urlencode
 from uuid import uuid4
 
+from django.conf import settings
 from django.contrib.auth import authenticate, get_user_model, login, logout, update_session_auth_hash
 from django.contrib.auth.models import Group
 from django.contrib.auth.password_validation import validate_password
@@ -13,7 +15,7 @@ from django.middleware.csrf import get_token
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.decorators import method_decorator
-from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
+from django.views.decorators.csrf import csrf_exempt, csrf_protect, ensure_csrf_cookie
 from rest_framework import generics, serializers, status
 from rest_framework.permissions import AllowAny, BasePermission, IsAuthenticated
 from rest_framework.response import Response
@@ -21,7 +23,14 @@ from rest_framework.views import APIView
 
 from apps.access.api import es_cuenta_puerta
 from apps.access.services import DOOR_GROUP
-from apps.billing.models import Membership, MembershipOverlapError, Payment, registrar_pago
+from apps.billing.models import (
+    Membership,
+    MembershipOverlapError,
+    OnlinePayment,
+    Payment,
+    registrar_pago,
+)
+from apps.billing.wompi import checkout_url, serializable_event, verify_event
 from apps.dashboard.views import calcular_estadisticas
 from apps.members.models import Member
 from apps.members.validators import validate_birth_date, validate_document_number, validate_ten_digits
@@ -486,6 +495,177 @@ class MemberPortalView(APIView):
                 for payment in payments
             ],
         })
+
+
+class MemberPlanListView(generics.ListAPIView):
+    permission_classes = [IsMemberRole]
+
+    def get_queryset(self):
+        return Plan.objects.filter(activo=True, es_pareja=False).order_by('duracion_dias', 'nombre')
+
+    def list(self, request, *args, **kwargs):
+        return Response([
+            {
+                'id': plan.id,
+                'nombre': plan.nombre,
+                'precio_cop': plan.precio_cop,
+                'duracion_dias': plan.duracion_dias,
+            }
+            for plan in self.get_queryset()
+        ])
+
+
+class MemberOnlinePaymentCreateView(APIView):
+    permission_classes = [IsMemberRole]
+
+    @transaction.atomic
+    def post(self, request):
+        plan = get_object_or_404(
+            Plan.objects.select_for_update(),
+            pk=request.data.get('plan_id'),
+            activo=True,
+            es_pareja=False,
+        )
+        member = Member.objects.select_for_update().get(pk=request.user.member.pk)
+        today = timezone.localdate()
+        latest = member.memberships.operativas().filter(fecha_fin__gte=today).order_by('-fecha_fin').first()
+        fecha_inicio = latest.fecha_fin if latest else today
+        reference = f"PF-{uuid4().hex.upper()}"
+        online_payment = OnlinePayment.objects.create(
+            member=member,
+            plan=plan,
+            referencia=reference,
+            monto_cop=plan.precio_cop,
+            fecha_inicio=fecha_inicio,
+        )
+        redirect_base = getattr(settings, 'WOMPI_REDIRECT_URL', '')
+        if not redirect_base:
+            raise serializers.ValidationError(
+                {'detail': 'El sistema de pagos electrónicos no está configurado.'}
+            )
+        return Response({
+            'id': online_payment.id,
+            'referencia': reference,
+            'estado': online_payment.estado,
+            'monto_cop': online_payment.monto_cop,
+            'fecha_inicio': fecha_inicio.isoformat(),
+            'checkout_url': checkout_url(
+                reference=reference,
+                amount_cop=plan.precio_cop,
+                email=member.email,
+                full_name=f'{member.nombres} {member.apellidos}',
+                phone=member.telefono,
+                redirect_url=(
+                    f"{redirect_base}?{urlencode({'payment_id': online_payment.id})}"
+                ),
+            ),
+        }, status=status.HTTP_201_CREATED)
+
+
+class MemberOnlinePaymentStatusView(APIView):
+    permission_classes = [IsMemberRole]
+
+    def get(self, request, pk):
+        online_payment = get_object_or_404(
+            OnlinePayment.objects.select_related('plan', 'payment'),
+            pk=pk,
+            member=request.user.member,
+        )
+        return Response({
+            'id': online_payment.id,
+            'referencia': online_payment.referencia,
+            'estado': online_payment.estado,
+            'monto_cop': online_payment.monto_cop,
+            'fecha_inicio': online_payment.fecha_inicio.isoformat(),
+            'transaccion_id': online_payment.transaccion_id or None,
+            'payment_id': online_payment.payment_id,
+        })
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class WompiWebhookView(APIView):
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    @transaction.atomic
+    def post(self, request):
+        event = request.data
+        if not verify_event(event):
+            return Response({'detail': 'Firma de evento inválida.'}, status=status.HTTP_400_BAD_REQUEST)
+        if event.get('environment') != getattr(settings, 'WOMPI_ENVIRONMENT', 'test'):
+            return Response({'detail': 'Ambiente de evento inválido.'}, status=status.HTTP_400_BAD_REQUEST)
+        if event.get('event') != 'transaction.updated':
+            return Response({'received': True})
+
+        transaction_data = (event.get('data') or {}).get('transaction') or {}
+        reference = transaction_data.get('reference')
+        online_payment = get_object_or_404(
+            OnlinePayment.objects.select_for_update(),
+            referencia=reference,
+        )
+        if online_payment.estado == OnlinePayment.Estado.APROBADO:
+            return Response({'received': True, 'processed': True})
+        if transaction_data.get('currency') != 'COP' or (
+            transaction_data.get('amount_in_cents') != online_payment.monto_cop * 100
+        ):
+            return Response({'detail': 'El monto o la moneda no coinciden.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        provider_status = transaction_data.get('status')
+        final_states = {
+            'DECLINED': OnlinePayment.Estado.RECHAZADO,
+            'ERROR': OnlinePayment.Estado.RECHAZADO,
+            'VOIDED': OnlinePayment.Estado.ANULADO,
+            'APPROVED': OnlinePayment.Estado.APROBADO,
+        }
+        online_payment.transaccion_id = transaction_data.get('id', '')
+        online_payment.metodo = transaction_data.get('payment_method_type', '')
+        online_payment.respuesta_proveedor = serializable_event(event)
+        online_payment.estado = final_states.get(provider_status, online_payment.estado)
+
+        if provider_status == 'APPROVED':
+            try:
+                payment = registrar_pago(
+                    online_payment.member,
+                    online_payment.plan,
+                    _wompi_payment_method(transaction_data.get('payment_method_type')),
+                    monto_cop=online_payment.monto_cop,
+                    fecha=_wompi_payment_date(transaction_data),
+                    referencia=online_payment.referencia,
+                    fecha_inicio=online_payment.fecha_inicio,
+                    permitir_inicio_en_fecha_fin=True,
+                )
+            except MembershipOverlapError as exc:
+                online_payment.estado = OnlinePayment.Estado.RECHAZADO
+                online_payment.respuesta_proveedor = {
+                    **online_payment.respuesta_proveedor,
+                    'activation_error': str(exc),
+                }
+            else:
+                online_payment.payment = payment
+        online_payment.save()
+        return Response({'received': True, 'processed': True})
+
+
+def _wompi_payment_method(method):
+    return {
+        'NEQUI': Payment.Metodo.NEQUI,
+        'PSE': Payment.Metodo.TRANSFERENCIA,
+        'BANCOLOMBIA_TRANSFER': Payment.Metodo.TRANSFERENCIA,
+        'BANCOLOMBIA_QR': Payment.Metodo.TRANSFERENCIA,
+        'CARD': Payment.Metodo.TARJETA,
+    }.get(method, Payment.Metodo.TRANSFERENCIA)
+
+
+def _wompi_payment_date(transaction_data):
+    finalized_at = transaction_data.get('finalized_at')
+    if not finalized_at:
+        return timezone.localdate()
+    try:
+        return datetime.fromisoformat(finalized_at.replace('Z', '+00:00')).astimezone(
+            timezone.get_current_timezone()
+        ).date()
+    except ValueError:
+        return timezone.localdate()
 
 
 class DashboardView(APIView):
