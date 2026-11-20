@@ -272,9 +272,9 @@ function LoginScreen({ onLogin, connectionError }) {
       <aside className="login-hero">
         <BrandLogo className="login-logo" />
         <div className="login-hero-content">
-          <p className="login-hero-eyebrow">PASSION FITNESS · CLUB MANAGEMENT</p>
+          <p className="login-hero-eyebrow">PASSION FITNESS · Gimnasio MANAGEMENT</p>
           <p className="login-hero-title">Entrena con <span>propósito.</span></p>
-          <p className="login-hero-description">Todo lo que necesitas para llevar tu club al siguiente nivel.</p>
+          <p className="login-hero-description">Todo lo que necesitas para llevar tu Gimnasio al siguiente nivel.</p>
         </div>
         <div className="login-hero-footer">
           <span>© {new Date().getFullYear()} Passion Fitness</span>
@@ -1542,7 +1542,7 @@ function MembersManagementView({
     <div className="page-wrap">
       <section className="page-heading">
         <div>
-          <p className="eyebrow">ADMINISTRACIÓN DEL CLUB</p>
+          <p className="eyebrow">ADMINISTRACIÓN DEL Gimnasio</p>
           <h1>
             Gestión de Miembros<span>.</span>
           </h1>
@@ -1968,7 +1968,7 @@ function PlansManagementView({ onBackToDashboard, showToast, onPlanListChanged }
     <div className="page-wrap">
       <section className="page-heading">
         <div>
-          <p className="eyebrow">ADMINISTRACIÓN DEL CLUB</p>
+          <p className="eyebrow">ADMINISTRACIÓN DEL Gimnasio</p>
           <h1>
             Gestión de Planes de Membresía<span>.</span>
           </h1>
@@ -1999,7 +1999,7 @@ function PlansManagementView({ onBackToDashboard, showToast, onPlanListChanged }
           icon={SlidersHorizontal}
           label="Cantidad total de planes"
           value={totalPlansCount}
-          caption="Planes registrados en el club"
+          caption="Planes registrados en el Gimnasio"
           tone="blue"
         />
         <Metric
@@ -2576,7 +2576,7 @@ function PaymentHistoryView({
         th,td { padding:8px 7px; border-bottom:1px solid #e1e7e0; } td { font-size:10px; }
         footer { margin-top:22px; color:#7b877c; font-size:10px; } @media print { footer { position:fixed; bottom:0; } }
       </style></head><body>
-      <header><img src="${brandLogo}" alt="Passion Fitness"><div><h1>Reporte de pagos</h1><p>${selectedMember ? `Miembro: ${selectedMember.nombre}` : 'Historial general del club'} · ${periodLabel}</p></div></header>
+      <header><img src="${brandLogo}" alt="Passion Fitness"><div><h1>Reporte de pagos</h1><p>${selectedMember ? `Miembro: ${selectedMember.nombre}` : 'Historial general del Gimnasio'} · ${periodLabel}</p></div></header>
       <section class="summary"><div>Pagos incluidos<strong>${reportPayments.length}</strong></div><div>Recaudado válido<strong>${formatCurrency(total)}</strong></div><div>Generado por<strong>${username}</strong></div></section>
       <table><thead><tr><th>FECHA</th><th>MIEMBRO</th><th>PLAN</th><th>MÉTODO</th><th>MONTO</th><th>ESTADO</th></tr></thead><tbody>${rows || '<tr><td colspan="6">No hay pagos en el periodo seleccionado.</td></tr>'}</tbody></table>
       <footer>Passion Fitness · Generado el ${new Date().toLocaleString('es-CO')} · Usuario: ${username}</footer>
@@ -2595,7 +2595,7 @@ function PaymentHistoryView({
           <p className="page-subtitle">
             {selectedMember
               ? `Historial de pagos y vigencias de ${selectedMember.nombre}.`
-              : 'Registro y auditoría de todas las transacciones de membresías del club.'}
+              : 'Registro y auditoría de todas las transacciones de membresías del Gimnasio.'}
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -2701,7 +2701,7 @@ function PaymentHistoryView({
             <h2>
               {selectedMember
                 ? `Recibos de ${selectedMember.nombre}`
-                : 'Historial completo de pagos del club'}
+                : 'Historial completo de pagos del Gimnasio'}
             </h2>
           </div>
           <div className="member-tools">
@@ -3258,7 +3258,7 @@ export default function App() {
         </nav>
 
         <div className="sidebar-bottom">
-          <div className="sidebar-label">CLUB</div>
+          <div className="sidebar-label">Gimnasio</div>
           <a className="nav-link" href="mailto:soporte@passionfitness.co" aria-label="Soporte" title="Soporte">
             <CircleHelp size={18} />
             <span>Soporte</span>
@@ -3407,7 +3407,7 @@ export default function App() {
               </div>
             )}
 
-            <section className={`metrics-grid${isAdmin ? '' : ' metrics-grid-reception'}`} aria-label="Indicadores del club">
+            <section className={`metrics-grid${isAdmin ? '' : ' metrics-grid-reception'}`} aria-label="Indicadores del Gimnasio">
               <Metric
                 icon={Users}
                 label="Miembros registrados"
@@ -3463,7 +3463,7 @@ export default function App() {
                 <div className="panel-heading">
                   <div>
                     <p className="eyebrow">RENDIMIENTO</p>
-                    <h2>Ingresos del club</h2>
+                    <h2>Ingresos del Gimnasio</h2>
                   </div>
                   <label className="select-wrap">
                     <span className="sr-only">Periodo del gráfico</span>
@@ -3506,7 +3506,7 @@ export default function App() {
             <section className="panel member-status-panel" aria-labelledby="member-status-title">
               <div className="panel-heading">
                 <div>
-                  <p className="eyebrow">DISTRIBUCIÓN DEL CLUB</p>
+                  <p className="eyebrow">DISTRIBUCIÓN DEL Gimnasio</p>
                   <h2 id="member-status-title">Estado de los miembros</h2>
                 </div>
                 <div className="member-status-heading-actions">
