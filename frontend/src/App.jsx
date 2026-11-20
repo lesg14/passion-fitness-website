@@ -40,6 +40,7 @@ import { matchesMemberSearch } from './memberSearch.js';
 
 const RevenueChart = lazy(() => import('./RevenueChart.jsx'));
 const PlansChart = lazy(() => import('./PlansChart.jsx'));
+const MemberStatusChart = lazy(() => import('./MemberStatusChart.jsx'));
 
 const formatCurrency = (value) =>
   new Intl.NumberFormat('es-CO', {
@@ -84,6 +85,8 @@ function getBogotaTodayString() {
   const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
   return `${values.year}-${values.month}-${values.day}`;
 }
+
+const MEMBER_ALPHABET = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'Ñ', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'];
 
 function getTomorrowOrNextDayString(dateString) {
   if (!dateString) return getTodayString();
@@ -395,6 +398,103 @@ function Metric({ icon: Icon, label, value, caption, tone, comparison }) {
       <p className="metric-value">{value}</p>
       <p className="metric-caption">{caption}</p>
     </article>
+  );
+}
+
+function RenewalContactDialog({ alert, onClose, onSuccess }) {
+  const [canal, setCanal] = useState('whatsapp');
+  const [nota, setNota] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  async function submit(event) {
+    event.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      await apiRequest('/renewal-contacts/', {
+        method: 'POST',
+        body: { member_id: alert.member_id, canal, nota },
+      });
+      onSuccess('Contacto de renovación registrado.');
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <section className="dialog" role="dialog" aria-modal="true" aria-labelledby="renewal-contact-title">
+        <div className="dialog-heading">
+          <div>
+            <p className="eyebrow">SEGUIMIENTO</p>
+            <h2 id="renewal-contact-title">Registrar contacto</h2>
+          </div>
+          <button className="dialog-close" type="button" onClick={onClose} aria-label="Cerrar"><X size={18} /></button>
+        </div>
+        <p className="dialog-info-banner">
+          <strong>{alert.nombre}</strong>
+          <span>Vence {alert.dias_restantes === 0 ? 'hoy' : `en ${alert.dias_restantes} días`} · {alert.plan}</span>
+        </p>
+        <form className="member-form" onSubmit={submit}>
+          <label>
+            Canal
+            <select value={canal} onChange={(event) => setCanal(event.target.value)}>
+              <option value="llamada">Llamada</option>
+              <option value="whatsapp">WhatsApp</option>
+              <option value="mensaje">Mensaje</option>
+            </select>
+          </label>
+          <label>
+            Observación (opcional)
+            <textarea value={nota} onChange={(event) => setNota(event.target.value)} maxLength={500} rows={4} placeholder="Ej. Indicó que renovará el viernes." />
+          </label>
+          {error && <p className="form-error" role="alert">{error}</p>}
+          <div className="dialog-actions">
+            <button className="button button-quiet" type="button" onClick={onClose}>Cancelar</button>
+            <button className="button button-primary" type="submit" disabled={busy}>{busy ? 'Guardando…' : 'Guardar contacto'}</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
+}
+
+function RenewalAlertsPanel({ alerts, loading, onContact, onRenew }) {
+  return (
+    <section className="panel renewal-alerts-panel" aria-labelledby="renewal-alerts-title">
+      <div className="panel-heading">
+        <div>
+          <p className="eyebrow">SEGUIMIENTO DE RENOVACIONES</p>
+          <h2 id="renewal-alerts-title">Alertas de renovación</h2>
+        </div>
+        <AlertTriangle size={19} aria-hidden="true" />
+      </div>
+      <p className="renewal-alerts-description">Miembros que vencen hoy o en 1, 3 y 7 días. Registra cada contacto realizado desde recepción.</p>
+      {loading ? (
+        <p className="expiring-empty">Cargando alertas…</p>
+      ) : alerts.length ? (
+        <ul className="renewal-alerts-list">
+          {alerts.map((alert) => (
+            <li className="renewal-alert-item" key={alert.member_id}>
+              <div>
+                <strong>{alert.nombre}</strong>
+                <span>{alert.plan} · {alert.dias_restantes === 0 ? 'Vence hoy' : `Vence en ${alert.dias_restantes} días`}</span>
+                {alert.ultimo_contacto && <small>Último contacto: {alert.ultimo_contacto.canal}</small>}
+              </div>
+              <div className="renewal-alert-actions">
+                <button className="action-btn action-renew" type="button" onClick={() => onContact(alert)}>Contactar</button>
+                <button className="button button-quiet" type="button" onClick={() => onRenew(alert)}>Renovar</button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="expiring-empty">No hay alertas de renovación para hoy ni los próximos 7 días.</p>
+      )}
+    </section>
   );
 }
 
@@ -2863,7 +2963,14 @@ export default function App() {
   const [period, setPeriod] = useState(6);
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('todos');
+  const [firstNameLetter, setFirstNameLetter] = useState('');
+  const [lastNameLetter, setLastNameLetter] = useState('');
+  const [sortDirection, setSortDirection] = useState('asc');
+  const [pageSize, setPageSize] = useState(10);
+  const [page, setPage] = useState(1);
   const [dashboard, setDashboard] = useState(null);
+  const [renewalAlerts, setRenewalAlerts] = useState([]);
+  const [renewalAlertsLoading, setRenewalAlertsLoading] = useState(false);
   const [members, setMembers] = useState([]);
   const [plans, setPlans] = useState([]);
   const [dataError, setDataError] = useState('');
@@ -2872,6 +2979,7 @@ export default function App() {
   const [selectedMemberForRenewal, setSelectedMemberForRenewal] = useState(null);
   const [selectedMemberForEdit, setSelectedMemberForEdit] = useState(null);
   const [selectedMemberForDelete, setSelectedMemberForDelete] = useState(null);
+  const [selectedRenewalAlert, setSelectedRenewalAlert] = useState(null);
   const [toastMessage, setToastMessage] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -2906,19 +3014,24 @@ export default function App() {
       setDataError('');
       try {
         if (user.role === 'member') return;
-        const [summary, memberList, activePlans] = await Promise.all([
+        setRenewalAlertsLoading(true);
+        const [summary, memberList, activePlans, alerts] = await Promise.all([
           apiRequest(`/dashboard/?months=${period}`),
           apiRequest(user.is_superuser ? '/members/?include_archived=true' : '/members/'),
           apiRequest('/plans/'),
+          apiRequest('/renewal-alerts/'),
         ]);
         if (active) {
           setDashboard(summary);
           setMembers(memberList);
           setPlans(activePlans);
+          setRenewalAlerts(alerts);
         }
       } catch (error) {
         if (active && error.status === 401) setUser(null);
         else if (active) setDataError(error.message);
+      } finally {
+        if (active) setRenewalAlertsLoading(false);
       }
     }
     loadData();
@@ -2952,10 +3065,12 @@ export default function App() {
 
   // Filtrado de miembros por búsqueda de texto y por estado
   const { visibleMembers, counts } = useMemo(() => {
+    const normalizeText = (value) => value.toLocaleUpperCase('es').normalize('NFD').replace(/N\u0303/g, 'Ñ').replace(/[\u0300-\u036f]/g, '');
     let act = 0;
     let porVenc = 0;
     let prox = 0;
     let venc = 0;
+    let sinMembresia = 0;
     let archivados = 0;
 
     members.forEach((m) => {
@@ -2963,39 +3078,73 @@ export default function App() {
       else if (m.estado === 'Activo') act++;
       else if (['Vence hoy', 'Vence mañana', 'Vence en 2 días', 'Vence en 3 días'].includes(m.estado)) porVenc++;
       else if (m.estado === 'Próxima') prox++;
-      else if (m.estado === 'Vencido' || m.estado === 'Sin membresía') venc++;
+      else if (m.estado === 'Vencido') venc++;
+      else if (m.estado === 'Sin membresía') sinMembresia++;
     });
 
     const filtered = members.filter((member) => {
-      if (!matchesMemberSearch(member, query, [member.plan])) return false;
-      if (member.archivado) return false;
+      if (!matchesMemberSearch(member, query, [member.plan, member.telefono])) return false;
+      if (firstNameLetter && !normalizeText(member.nombres).startsWith(normalizeText(firstNameLetter))) return false;
+      if (lastNameLetter && !normalizeText(member.apellidos).startsWith(normalizeText(lastNameLetter))) return false;
 
       if (statusFilter === 'activos') return member.estado === 'Activo';
       if (statusFilter === 'por_vencer')
         return ['Vence hoy', 'Vence mañana', 'Vence en 2 días', 'Vence en 3 días'].includes(member.estado);
       if (statusFilter === 'proximos') return member.estado === 'Próxima';
       if (statusFilter === 'vencidos') return member.estado === 'Vencido' || member.estado === 'Sin membresía';
+      if (statusFilter === 'archivados') return member.archivado;
+      if (member.archivado) return statusFilter === 'todos';
       return true;
+    });
+
+    filtered.sort((a, b) => {
+      const left = normalizeText(a.nombre || `${a.nombres} ${a.apellidos}`);
+      const right = normalizeText(b.nombre || `${b.nombres} ${b.apellidos}`);
+      return left.localeCompare(right, 'es') * (sortDirection === 'asc' ? 1 : -1);
     });
 
     return {
       visibleMembers: filtered,
       counts: {
-        todos: members.filter((member) => !member.archivado).length,
+        todos: members.length,
         activos: act,
         por_vencer: porVenc,
         proximos: prox,
         vencidos: venc,
+        sin_membresia: sinMembresia,
         archivados,
       },
     };
-  }, [members, query, statusFilter]);
+  }, [members, query, statusFilter, firstNameLetter, lastNameLetter, sortDirection]);
 
-  const expiringMembers = useMemo(() => (
-    members
-      .filter((member) => !member.archivado && ['Vence hoy', 'Vence mañana', 'Vence en 2 días', 'Vence en 3 días'].includes(member.estado))
-      .sort((a, b) => a.fecha_fin.localeCompare(b.fecha_fin) || a.nombre.localeCompare(b.nombre, 'es'))
-  ), [members]);
+  useEffect(() => {
+    setPage(1);
+  }, [query, statusFilter, firstNameLetter, lastNameLetter, sortDirection, pageSize]);
+
+  const totalMemberPages = Math.max(1, Math.ceil(visibleMembers.length / pageSize));
+  const paginatedMembers = visibleMembers.slice((page - 1) * pageSize, page * pageSize);
+
+  function exportDashboardMembersCsv() {
+    const escapeCsv = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+    const headers = ['Nombres', 'Apellidos', 'Documento', 'Teléfono', 'Correo', 'Plan', 'Fecha de vencimiento', 'Estado'];
+    const rows = visibleMembers.map((member) => [
+      member.nombres,
+      member.apellidos,
+      `${member.tipo_documento} ${member.numero_documento}`,
+      member.telefono,
+      member.email,
+      member.plan || 'Sin plan',
+      member.fecha_fin || '',
+      member.estado,
+    ]);
+    const csv = `\uFEFF${[headers, ...rows].map((row) => row.map(escapeCsv).join(';')).join('\r\n')}`;
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `miembros-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
 
   if (authLoading) return <main className="loading-screen">Conectando con Passion Fitness…</main>;
   if (!user) return <LoginScreen onLogin={handleLogin} connectionError={connectionError} />;
@@ -3294,8 +3443,22 @@ export default function App() {
               />
             </section>
 
-            <section className="overview-grid">
-              {isAdmin ? (
+            <RenewalAlertsPanel
+              alerts={renewalAlerts}
+              loading={renewalAlertsLoading}
+              onContact={setSelectedRenewalAlert}
+              onRenew={(alert) => setSelectedMemberForRenewal(
+                members.find((member) => member.id === alert.member_id) || {
+                  id: alert.member_id,
+                  nombre: alert.nombre,
+                  numero_documento: alert.numero_documento,
+                  fecha_fin: alert.fecha_fin,
+                },
+              )}
+            />
+
+            {isAdmin && (
+              <section className="overview-grid economic-overview">
               <article className="panel revenue-panel" id="ingresos">
                 <div className="panel-heading">
                   <div>
@@ -3321,45 +3484,10 @@ export default function App() {
                   </Suspense>
                 </div>
               </article>
-              ) : (
-                <article className="panel expiring-panel" aria-labelledby="expiring-title">
-                  <div className="panel-heading">
-                    <div>
-                      <p className="eyebrow">SEGUIMIENTO</p>
-                      <h2 id="expiring-title">Membresías por vencer</h2>
-                    </div>
-                    <CalendarDays size={19} aria-hidden="true" />
-                  </div>
-                  <p className="expiring-description">Miembros que vencen hoy o en los próximos 3 días y no tienen otra membresía operativa con vencimiento posterior.</p>
-                  {dataError ? (
-                    <p className="expiring-empty">No se pudieron cargar los vencimientos. Usa la opción de reintentar.</p>
-                  ) : !dashboard ? (
-                    <p className="expiring-empty">Cargando vencimientos…</p>
-                  ) : expiringMembers.length ? (
-                    <ul className="expiring-list">
-                      {expiringMembers.map((member) => (
-                        <li className="expiring-item" key={member.id}>
-                          <div>
-                            <strong>{member.nombre}</strong>
-                            <span>{member.tipo_documento} {member.numero_documento} · {member.estado} ({formatDate(member.fecha_fin)})</span>
-                          </div>
-                          <button
-                            className="action-btn action-renew"
-                            type="button"
-                            aria-label={`Renovar membresía de ${member.nombre}, documento ${member.numero_documento}`}
-                            onClick={() => setSelectedMemberForRenewal(member)}
-                          >
-                            Renovar
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="expiring-empty">No hay membresías por vencer en los próximos 3 días.</p>
-                  )}
-                </article>
-              )}
+              </section>
+            )}
 
+            <section className="overview-grid circular-overview">
               <article className="panel pulse-panel" id="planes">
                 <div className="panel-heading">
                   <div>
@@ -3375,9 +3503,35 @@ export default function App() {
                   <p className="empty-plans">Todavía no hay membresías registradas.</p>
                 )}
               </article>
+            <section className="panel member-status-panel" aria-labelledby="member-status-title">
+              <div className="panel-heading">
+                <div>
+                  <p className="eyebrow">DISTRIBUCIÓN DEL CLUB</p>
+                  <h2 id="member-status-title">Estado de los miembros</h2>
+                </div>
+                <div className="member-status-heading-actions">
+                  <Users size={19} aria-hidden="true" />
+                  <button className="button button-quiet" type="button" onClick={() => setActiveTab('members')}>
+                    Ver lista completa <ArrowUpRight size={14} />
+                  </button>
+                </div>
+              </div>
+              <p className="member-status-description">Resumen de miembros activos, por vencer, sin membresía, vencidos y próximos.</p>
+              <Suspense fallback={<p className="expiring-empty">Cargando estadísticas…</p>}>
+                <MemberStatusChart
+                  data={[
+                    { key: 'activos', label: 'Activos', value: counts.activos },
+                    { key: 'por_vencer', label: 'Por vencer', value: counts.por_vencer },
+                    { key: 'sin_membresia', label: 'Sin membresía', value: counts.sin_membresia },
+                    { key: 'vencidos', label: 'Vencidos', value: counts.vencidos },
+                    { key: 'proximos', label: 'Próximos', value: counts.proximos },
+                  ]}
+                />
+              </Suspense>
+            </section>
             </section>
 
-            <section className="panel members-panel" id="miembros">
+            <section className="panel members-panel" id="miembros" style={{ display: 'none' }}>
               <div className="panel-heading members-heading">
                 <div>
                   <p className="eyebrow">SEGUIMIENTO</p>
@@ -3398,6 +3552,9 @@ export default function App() {
                       Limpiar
                     </button>
                   )}
+                  <button className="button button-quiet" type="button" onClick={exportDashboardMembersCsv} disabled={!visibleMembers.length}>
+                    <FileDown size={14} /> Exportar
+                  </button>
                   <button
                     className="button button-quiet"
                     type="button"
@@ -3407,6 +3564,11 @@ export default function App() {
                     Ver gestión completa <ArrowUpRight size={14} />
                   </button>
                 </div>
+              </div>
+
+              <div className="alphabet-filters" aria-label="Filtros alfabéticos">
+                <div><strong>Nombre</strong><button type="button" className={!firstNameLetter ? 'active' : ''} onClick={() => setFirstNameLetter('')}>Todos</button>{MEMBER_ALPHABET.map((letter) => <button type="button" className={firstNameLetter === letter ? 'active' : ''} key={`dashboard-first-${letter}`} onClick={() => setFirstNameLetter(letter)}>{letter}</button>)}{firstNameLetter && <button type="button" className="alphabet-clear" onClick={() => setFirstNameLetter('')}>Limpiar</button>}</div>
+                <div><strong>Apellido(s)</strong><button type="button" className={!lastNameLetter ? 'active' : ''} onClick={() => setLastNameLetter('')}>Todos</button>{MEMBER_ALPHABET.map((letter) => <button type="button" className={lastNameLetter === letter ? 'active' : ''} key={`dashboard-last-${letter}`} onClick={() => setLastNameLetter(letter)}>{letter}</button>)}{lastNameLetter && <button type="button" className="alphabet-clear" onClick={() => setLastNameLetter('')}>Limpiar</button>}</div>
               </div>
 
               {/* Filtros rápidos por estado */}
@@ -3457,6 +3619,32 @@ export default function App() {
                   >
                     Vencidos <span className="filter-count">{counts.vencidos}</span>
                   </button>
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={statusFilter === 'archivados'}
+                      className={`filter-tab ${statusFilter === 'archivados' ? 'active' : ''}`}
+                      onClick={() => setStatusFilter('archivados')}
+                    >
+                      Archivados <span className="filter-count">{counts.archivados}</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="members-pagination members-pagination-top">
+                <label>Filas
+                  <select value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))}>
+                    <option value={10}>10</option><option value={20}>20</option><option value={30}>30</option>
+                  </select>
+                </label>
+                <span>Página {page} de {totalMemberPages} · {visibleMembers.length} miembros</span>
+                <div>
+                  <button className="icon-button" type="button" onClick={() => setPage(1)} disabled={page === 1} aria-label="Primera página"><ChevronsLeft size={15} /></button>
+                  <button className="button button-quiet" type="button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page === 1}>Anterior</button>
+                  <button className="button button-quiet" type="button" onClick={() => setPage((current) => Math.min(totalMemberPages, current + 1))} disabled={page === totalMemberPages}>Siguiente</button>
+                  <button className="icon-button" type="button" onClick={() => setPage(totalMemberPages)} disabled={page === totalMemberPages} aria-label="Última página"><ChevronsRight size={15} /></button>
                 </div>
               </div>
 
@@ -3464,16 +3652,17 @@ export default function App() {
                 <table>
                   <thead>
                     <tr>
-                      <th>MIEMBRO</th>
-                      <th>PLAN</th>
+                      <th>MIEMBRO <button className="table-sort-button" type="button" onClick={() => setSortDirection((current) => current === 'asc' ? 'desc' : 'asc')} aria-label={`Ordenar miembros ${sortDirection === 'asc' ? 'de Z a A' : 'de A a Z'}`} title={`Orden actual: ${sortDirection === 'asc' ? 'A → Z' : 'Z → A'}`}><ChevronsUpDown size={13} /></button></th>
+                      <th>DOCUMENTO</th>
+                      <th>PLAN ACTUAL</th>
                       <th>VENCIMIENTO</th>
                       <th>ESTADO</th>
                       <th style={{ textAlign: 'right', paddingRight: 14 }}>ACCIONES</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {visibleMembers.length ? (
-                      visibleMembers.map((member) => (
+                    {paginatedMembers.length ? (
+                      paginatedMembers.map((member) => (
                         <tr key={member.id}>
                           <td>
                             <div className="member-cell">
@@ -3490,7 +3679,12 @@ export default function App() {
                               </span>
                             </div>
                           </td>
-                          <td className="plan-cell">{member.plan}</td>
+                          <td>
+                            <span style={{ fontSize: 11, color: '#334035', fontWeight: 600 }}>
+                              {member.tipo_documento} {member.numero_documento}
+                            </span>
+                          </td>
+                          <td className="plan-cell"><strong style={{ color: '#27342a' }}>{member.plan || 'Sin plan'}</strong></td>
                           <td className="date-cell">{formatDate(member.fecha_fin)}</td>
                           <td>{renderStatusPill(member.estado)}</td>
                           <td>
@@ -3500,6 +3694,7 @@ export default function App() {
                                 type="button"
                                 onClick={() => setSelectedMemberForRenewal(member)}
                                 title="Renovar membresía o cobrar"
+                                disabled={member.archivado || member.estado === 'Archivado'}
                               >
                                 <CreditCard size={12} /> Renovar / Cobrar
                               </button>
@@ -3540,7 +3735,7 @@ export default function App() {
                       ))
                     ) : (
                       <tr>
-                        <td colSpan="5" className="empty-state">
+                        <td colSpan="6" className="empty-state">
                           {query || statusFilter !== 'todos'
                             ? 'No hay miembros que coincidan con los filtros aplicados.'
                             : 'Todavía no hay miembros registrados.'}
@@ -3608,6 +3803,18 @@ export default function App() {
           onSuccess={(msg) => {
             showToast(msg);
             setRefreshKey((c) => c + 1);
+          }}
+        />
+      )}
+
+      {selectedRenewalAlert && (
+        <RenewalContactDialog
+          alert={selectedRenewalAlert}
+          onClose={() => setSelectedRenewalAlert(null)}
+          onSuccess={(message) => {
+            setSelectedRenewalAlert(null);
+            showToast(message);
+            setRefreshKey((current) => current + 1);
           }}
         />
       )}
