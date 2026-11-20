@@ -19,7 +19,6 @@ def calcular_estadisticas(hoy=None):
         fecha_fin__gte=hoy,
     )
     total = miembros_activos.count()
-    activos = vigentes.values("member").distinct().count()
     # Activos cuya membresía más larga termina en los próximos 3 días (hoy, mañana, en 2 días o en 3 días)
     por_vencer = (
         operativas.filter(
@@ -32,6 +31,18 @@ def calcular_estadisticas(hoy=None):
         .filter(fin__lte=limite)
         .count()
     )
+    miembros_por_vencer = (
+        operativas.filter(
+            member__archivado=False,
+            member__in=vigentes.values("member"),
+            fecha_fin__gte=hoy,
+        )
+        .values("member")
+        .annotate(fin=Max("fecha_fin"))
+        .filter(fin__lte=limite)
+        .values("member")
+    )
+    activos = vigentes.exclude(member__in=miembros_por_vencer).values("member").distinct().count()
     # Miembros con membresía futura (próxima a iniciar) que no tienen membresía activa hoy
     proximos = (
         operativas.filter(member__archivado=False, fecha_inicio__gt=hoy)

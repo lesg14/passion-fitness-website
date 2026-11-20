@@ -23,7 +23,7 @@ from apps.access.api import es_cuenta_puerta
 from apps.access.services import DOOR_GROUP
 from apps.billing.models import Membership, MembershipOverlapError, Payment, registrar_pago
 from apps.dashboard.views import calcular_estadisticas
-from apps.members.models import Member
+from apps.members.models import Member, RenewalContact
 from apps.members.validators import validate_birth_date, validate_document_number, validate_ten_digits
 from apps.plans.models import Plan
 
@@ -43,6 +43,17 @@ class IsMemberRole(BasePermission):
         return bool(
             request.user and request.user.is_authenticated and request.user.is_active
             and member and not member.archivado
+        )
+
+
+class IsStaffRole(BasePermission):
+    message = 'Se requieren permisos de recepción o administración.'
+
+    def has_permission(self, request, view):
+        return bool(
+            request.user and request.user.is_authenticated
+            and (request.user.is_staff or request.user.is_superuser)
+            and not es_cuenta_puerta(request.user)
         )
 
 
@@ -510,6 +521,85 @@ class DashboardView(APIView):
             'revenue': [{'month': month, 'revenue': total} for month, total in revenue],
             'plans': [{'name': name, 'memberships': count} for name, count in plans],
         })
+
+
+def renewal_alerts():
+    today = timezone.localdate()
+    target_days = {0, 1, 3, 7}
+    latest_by_member = {}
+    memberships = Membership.objects.operativas().filter(
+        member__archivado=False,
+    ).select_related('member', 'plan').order_by('-fecha_fin', '-id')
+    for membership in memberships:
+        current = latest_by_member.get(membership.member_id)
+        if current is None or membership.fecha_fin > current.fecha_fin:
+            latest_by_member[membership.member_id] = membership
+
+    contacts = RenewalContact.objects.filter(
+        member_id__in=latest_by_member,
+    ).select_related('registrado_por').order_by('-creado_en', '-id')
+    latest_contact = {}
+    for contact in contacts:
+        latest_contact.setdefault(contact.member_id, contact)
+
+    alerts = []
+    for membership in latest_by_member.values():
+        days = (membership.fecha_fin - today).days
+        if days not in target_days:
+            continue
+        contact = latest_contact.get(membership.member_id)
+        alerts.append({
+            'member_id': membership.member_id,
+            'nombre': str(membership.member),
+            'numero_documento': membership.member.numero_documento,
+            'telefono': membership.member.telefono,
+            'email': membership.member.email,
+            'plan': membership.plan.nombre,
+            'fecha_fin': membership.fecha_fin.isoformat(),
+            'dias_restantes': days,
+            'ultimo_contacto': {
+                'canal': contact.get_canal_display(),
+                'nota': contact.nota,
+                'creado_en': contact.creado_en.isoformat(),
+                'registrado_por': contact.registrado_por.get_username() if contact.registrado_por else 'Sistema',
+            } if contact else None,
+        })
+    return sorted(alerts, key=lambda item: (item['dias_restantes'], item['nombre']))
+
+
+class RenewalAlertListView(APIView):
+    permission_classes = [IsStaffRole]
+
+    def get(self, request):
+        return Response(renewal_alerts())
+
+
+class RenewalContactCreateView(APIView):
+    permission_classes = [IsStaffRole]
+
+    def post(self, request):
+        class ContactSerializer(serializers.Serializer):
+            member_id = serializers.IntegerField()
+            canal = serializers.ChoiceField(choices=RenewalContact.Canal.choices)
+            nota = serializers.CharField(max_length=500, required=False, allow_blank=True)
+
+        serializer = ContactSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        member = get_object_or_404(Member, pk=serializer.validated_data['member_id'], archivado=False)
+        contact = RenewalContact.objects.create(
+            member=member,
+            canal=serializer.validated_data['canal'],
+            nota=serializer.validated_data.get('nota', ''),
+            registrado_por=request.user,
+        )
+        return Response({
+            'id': contact.id,
+            'member_id': contact.member_id,
+            'canal': contact.get_canal_display(),
+            'nota': contact.nota,
+            'creado_en': contact.creado_en.isoformat(),
+            'registrado_por': request.user.get_username(),
+        }, status=status.HTTP_201_CREATED)
 
 
 class PlanSerializer(serializers.ModelSerializer):

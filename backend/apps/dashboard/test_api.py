@@ -6,7 +6,7 @@ from django.test import Client, TestCase
 from django.utils import timezone
 
 from apps.billing.models import Membership, Payment, registrar_pago
-from apps.members.models import Member
+from apps.members.models import Member, RenewalContact
 from apps.plans.models import Plan
 from apps.dashboard.views import calcular_estadisticas
 
@@ -71,6 +71,69 @@ class DashboardApiTests(TestCase):
         self.assertEqual(stats['comparativos']['ingresos_mes']['anterior'], 0)
         self.assertEqual(stats['comparativos']['ingresos_mes']['porcentaje'], 100)
         self.assertEqual(stats['comparativos']['ingresos_mes']['direccion'], 'up')
+
+    def test_renewal_alerts_include_selected_days_and_latest_membership_only(self):
+        alert_member = Member.objects.create(nombres='Hoy', apellidos='Alerta', numero_documento='0000000020')
+        Membership.objects.create(
+            member=alert_member,
+            plan=self.plan,
+            fecha_inicio=self.hoy - timedelta(days=29),
+            fecha_fin=self.hoy,
+        )
+        future_member = Member.objects.create(nombres='Siete', apellidos='Alerta', numero_documento='0000000021')
+        Membership.objects.create(
+            member=future_member,
+            plan=self.plan,
+            fecha_inicio=self.hoy - timedelta(days=22),
+            fecha_fin=self.hoy + timedelta(days=7),
+        )
+        excluded_member = Member.objects.create(nombres='Oculto', apellidos='Alerta', numero_documento='0000000022')
+        Membership.objects.create(
+            member=excluded_member,
+            plan=self.plan,
+            fecha_inicio=self.hoy - timedelta(days=29),
+            fecha_fin=self.hoy,
+        )
+        Membership.objects.create(
+            member=excluded_member,
+            plan=self.plan,
+            fecha_inicio=self.hoy + timedelta(days=1),
+            fecha_fin=self.hoy + timedelta(days=30),
+        )
+
+        self.client.force_login(self.staff)
+        response = self.client.get('/api/renewal-alerts/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            {item['member_id'] for item in response.json()},
+            {alert_member.id, future_member.id},
+        )
+        self.assertEqual(response.json()[0]['dias_restantes'], 0)
+
+    def test_staff_can_register_and_read_last_renewal_contact(self):
+        Membership.objects.create(
+            member=self.member,
+            plan=self.plan,
+            fecha_inicio=self.hoy - timedelta(days=29),
+            fecha_fin=self.hoy,
+        )
+        self.client.force_login(self.staff)
+        response = self.client.post(
+            '/api/renewal-contacts/',
+            data=json.dumps({
+                'member_id': self.member.id,
+                'canal': 'whatsapp',
+                'nota': 'Renovará el viernes.',
+            }),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(RenewalContact.objects.get().registrado_por, self.staff)
+        alert_response = self.client.get('/api/renewal-alerts/')
+        self.assertEqual(alert_response.status_code, 200)
+        self.assertEqual(alert_response.json()[0]['ultimo_contacto']['canal'], 'WhatsApp')
 
     def test_expiring_member_states_match_dashboard_count(self):
         cases = [
