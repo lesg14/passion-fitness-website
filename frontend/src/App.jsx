@@ -272,7 +272,7 @@ function LoginScreen({ onLogin, connectionError }) {
       <aside className="login-hero">
         <BrandLogo className="login-logo" />
         <div className="login-hero-content">
-          <p className="login-hero-eyebrow">PASSION FITNESS · Gimnasio MANAGEMENT</p>
+          <p className="login-hero-eyebrow">PASSION FITNESS · GIMNASIO MANAGEMENT</p>
           <p className="login-hero-title">Entrena con <span>propósito.</span></p>
           <p className="login-hero-description">Todo lo que necesitas para llevar tu Gimnasio al siguiente nivel.</p>
         </div>
@@ -1542,7 +1542,7 @@ function MembersManagementView({
     <div className="page-wrap">
       <section className="page-heading">
         <div>
-          <p className="eyebrow">ADMINISTRACIÓN DEL Gimnasio</p>
+          <p className="eyebrow">ADMINISTRACIÓN DEL GIMNASIO</p>
           <h1>
             Gestión de Miembros<span>.</span>
           </h1>
@@ -1968,7 +1968,7 @@ function PlansManagementView({ onBackToDashboard, showToast, onPlanListChanged }
     <div className="page-wrap">
       <section className="page-heading">
         <div>
-          <p className="eyebrow">ADMINISTRACIÓN DEL Gimnasio</p>
+          <p className="eyebrow">ADMINISTRACIÓN DEL GIMNASIO</p>
           <h1>
             Gestión de Planes de Membresía<span>.</span>
           </h1>
@@ -3506,7 +3506,7 @@ export default function App() {
             <section className="panel member-status-panel" aria-labelledby="member-status-title">
               <div className="panel-heading">
                 <div>
-                  <p className="eyebrow">DISTRIBUCIÓN DEL Gimnasio</p>
+                  <p className="eyebrow">DISTRIBUCIÓN DEL GIMNASIO</p>
                   <h2 id="member-status-title">Estado de los miembros</h2>
                 </div>
                 <div className="member-status-heading-actions">
