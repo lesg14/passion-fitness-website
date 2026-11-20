@@ -58,3 +58,21 @@ class Member(models.Model):
     @property
     def esta_activo(self):
         return self.membresia_vigente is not None
+
+
+class RenewalContact(models.Model):
+    class Canal(models.TextChoices):
+        LLAMADA = "llamada", "Llamada"
+        WHATSAPP = "whatsapp", "WhatsApp"
+        MENSAJE = "mensaje", "Mensaje"
+
+    member = models.ForeignKey(Member, on_delete=models.PROTECT, related_name="renewal_contacts")
+    canal = models.CharField(max_length=20, choices=Canal.choices)
+    nota = models.CharField(max_length=500, blank=True)
+    registrado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="+"
+    )
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-creado_en", "-id"]
