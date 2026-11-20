@@ -178,7 +178,7 @@ Operaciones permitidas:
 
 ### Registrar Miembro con Primera Membresía
 
-**Rol:** Recepción o Administrador  
+**Rol:** Recepción o Administrador
 **Endpoint:** `POST /api/members/`  
 **Parámetros:**
 ```json
@@ -292,6 +292,18 @@ Operaciones permitidas:
 - **Ingresos históricos:** Suma mensual de pagos no anulados.
 
 **Restricción:** Los pagos anulados se excluyen de todos los cálculos.
+
+---
+
+### Alertas y Seguimiento de Renovaciones
+
+**Rol:** Recepción o Administrador
+**Endpoints:** `GET /api/renewal-alerts/` y `POST /api/renewal-contacts/`
+
+- El panel muestra miembros no archivados cuya membresía operativa más reciente vence hoy o en 1, 3 o 7 días.
+- Una membresía anterior no genera alerta si existe otra membresía operativa posterior para el mismo miembro.
+- `POST /api/renewal-contacts/` registra el canal (`llamada`, `whatsapp` o `mensaje`), una observación opcional y el usuario que realizó el contacto.
+- Los contactos se conservan como historial y no modifican pagos, membresías ni fechas de vigencia.
 
 ---
 
